@@ -5,8 +5,8 @@ import { createColors } from 'picocolors';
  *
  * Windows PowerShell 5.1 decodes redirected child output with the OEM code
  * page, so any non-ASCII byte we print turns into garbage there. Fancy symbols
- * and colors are only used when stdout is an interactive terminal; everything
- * else gets plain ASCII.
+ * and colors are only used when the stream we write to is an interactive
+ * terminal; everything else gets plain ASCII.
  */
 
 const env = process.env;
@@ -17,9 +17,9 @@ function colorEnabled(stream: NodeJS.WriteStream): boolean {
   return Boolean(stream.isTTY) && env.TERM !== 'dumb';
 }
 
-/** Same heuristic as @clack/prompts, plus a TTY check. */
-function unicodeEnabled(): boolean {
-  if (!process.stdout.isTTY) return false;
+/** Same heuristic as @clack/prompts, plus a TTY check of the stream we write to. */
+function unicodeEnabled(stream: NodeJS.WriteStream): boolean {
+  if (!stream.isTTY) return false;
   if (process.platform !== 'win32') return env.TERM !== 'linux';
   return Boolean(
     env.WT_SESSION ||
@@ -36,10 +36,11 @@ export const interactive = Boolean(process.stdout.isTTY);
 export const color = createColors(colorEnabled(process.stdout));
 const errColor = createColors(colorEnabled(process.stderr));
 
-const unicode = unicodeEnabled();
-const sym = unicode
-  ? { step: '●', ok: '✔', warn: '▲', err: '✖', bullet: '•' }
-  : { step: '*', ok: '+', warn: '!', err: 'x', bullet: '-' };
+const sym = unicodeEnabled(process.stdout)
+  ? { step: '●', ok: '✔', warn: '▲', bullet: '•' }
+  : { step: '*', ok: '+', warn: '!', bullet: '-' };
+// stdout and stderr can be redirected separately, so errors check their own stream.
+const errSym = unicodeEnabled(process.stderr) ? '✖' : 'x';
 
 export const bullet = sym.bullet;
 
@@ -63,7 +64,7 @@ export const log = {
     if (hint) write(`  ${color.dim(hint)}`);
   },
   error(message: string, hint?: string): void {
-    process.stderr.write(`${errColor.red(sym.err)} ${message}\n`);
+    process.stderr.write(`${errColor.red(errSym)} ${message}\n`);
     if (hint) process.stderr.write(`  ${hint}\n`);
   },
 };
