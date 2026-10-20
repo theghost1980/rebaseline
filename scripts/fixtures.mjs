@@ -5,11 +5,8 @@
 //   3. runs the tests again with UI_COLOR=changed to provoke every failure case,
 //   4. saves the HTML report to fixtures/reports/pw-<version>/report/.
 //
-// Absolute paths of this machine inside the saved report are rewritten to the
-// layout of a GitHub Actions Linux runner (CI_ROOT), so the committed report
-// does not leak local paths and looks like a report downloaded from CI.
-// The live report stays in fixtures/pw-project/playwright-report (gitignored)
-// with real local paths, ready for `rebaseline review`.
+// Absolute local paths in the saved report are replaced with a neutral prefix
+// so no machine paths are committed.
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

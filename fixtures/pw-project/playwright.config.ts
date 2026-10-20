@@ -1,8 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
-// Minimal project used to produce real Playwright HTML reports for rebaseline's tests.
-// Both projects render the same pages, so their screenshots are byte-identical:
-// that is the tie the resolver has to break with the project name.
+// Minimal Playwright project used to generate test data.
+// Both projects render the same pages on purpose.
 export default defineConfig({
   testDir: './tests',
   // Without these, Playwright puts both folders next to the nearest package.json (the repo root).
