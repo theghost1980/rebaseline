@@ -17,7 +17,8 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "fixtures": "node scripts/fixtures.mjs"
+    "fixtures": "node scripts/fixtures.mjs",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "repository": {
     "type": "git",
