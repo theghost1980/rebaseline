@@ -1,3 +1,3 @@
 # rebaseline
 
-Work in progress.
+A developer CLI under active development. First release coming soon.
