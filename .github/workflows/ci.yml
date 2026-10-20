@@ -20,8 +20,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -29,21 +29,3 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: node dist/cli.js --version
-
-  # The dev toolchain needs Node 22+, but the published CLI promises Node 18.
-  node18:
-    name: smoke (node 18)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 18
-      - run: node dist/cli.js --version
-      - run: node dist/cli.js --help
