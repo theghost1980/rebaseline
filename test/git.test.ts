@@ -46,7 +46,7 @@ describe('git helpers', () => {
 
   it('finds the repository root from a subfolder', async () => {
     const root = await makeRepo();
-    expect(realpathSync(await repoRoot(path.join(root, 'e2e')))).toBe(realpathSync(root));
+    expect(realpathSync.native(await repoRoot(path.join(root, 'e2e')))).toBe(realpathSync.native(root));
   });
 
   it('lists tracked PNG files, leaving out test output folders and untracked files', async () => {
@@ -68,7 +68,7 @@ describe('git helpers', () => {
   it('loads the baselines under the current folder', async () => {
     const root = await makeRepo();
     const baselines = await loadBaselines(path.join(root, 'e2e'));
-    expect(realpathSync(baselines.root)).toBe(realpathSync(root));
+    expect(realpathSync.native(baselines.root)).toBe(realpathSync.native(root));
     expect(baselines.index.get(sha1(png('hero')))).toEqual(['e2e/a.spec.ts-snapshots/hero-chromium-linux.png']);
     expect(baselines.index.has(sha1(png('logo')))).toBe(false);
     expect(baselines.index.has(sha1(png('actual')))).toBe(false);

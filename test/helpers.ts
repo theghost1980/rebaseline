@@ -29,7 +29,8 @@ afterAll(() => {
 
 /** A new empty folder, removed after the test file finishes. */
 export function tempDir(): string {
-  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'rebaseline-test-')));
+  // The native realpath also expands Windows 8.3 short names, like the RUNNER~1 temp folder on CI.
+  const dir = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'rebaseline-test-')));
   tempDirs.push(dir);
   return dir;
 }
