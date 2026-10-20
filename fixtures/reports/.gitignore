@@ -1,0 +1,3 @@
+# Leftovers of an interrupted "npm run fixtures".
+.tmp-*/
+.old-*/
