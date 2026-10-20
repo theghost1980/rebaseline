@@ -1,0 +1,11 @@
+{
+  "playwright": "1.64.1",
+  "platform": "win32",
+  "projectPath": "fixtures/pw-project",
+  "ciRoot": "/home/runner/work/rebaseline/rebaseline",
+  "note": "Absolute local paths in report/ were rewritten to ciRoot. baselines/ holds the baseline tree before the failing run, relative to projectPath.",
+  "newSnapshots": [
+    "tests/__screenshots__/custom/visual.spec.ts/brand-new.png",
+    "tests/visual.spec.ts-snapshots/brand-new-default-win32.png"
+  ]
+}
