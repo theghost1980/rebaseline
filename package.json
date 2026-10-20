@@ -1,0 +1,25 @@
+{
+  "name": "rebaseline",
+  "version": "0.0.1",
+  "description": "Work in progress.",
+  "type": "module",
+  "bin": {
+    "rebaseline": "bin/rebaseline.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theghost1980/rebaseline.git"
+  },
+  "homepage": "https://github.com/theghost1980/rebaseline#readme",
+  "bugs": {
+    "url": "https://github.com/theghost1980/rebaseline/issues"
+  },
+  "author": "theghost1980",
+  "license": "MIT"
+}
