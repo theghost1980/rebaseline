@@ -1,3 +1,4 @@
+* text=auto eol=lf
 *.png binary
 # Saved Playwright reports are test data; keep them byte for byte on every OS.
 fixtures/reports/** -text
