@@ -97,7 +97,8 @@ export async function startServer(session: ReviewSession, options: ServerOptions
         sendJson(res, 404, { error: 'Image not found' });
         return;
       }
-      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'image/png' });
+      // Report images never change during a review, so the page may keep them.
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Cache-Control': 'private, max-age=3600', 'Content-Type': 'image/png' });
       createReadStream(file)
         .on('error', () => res.destroy())
         .pipe(res);

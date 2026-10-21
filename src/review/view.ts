@@ -40,6 +40,8 @@ export interface OtherFailureView {
   line: number;
   status: string;
   error: string;
+  /** New snapshots Playwright reported but did not save (update mode "none"). */
+  unsavedSnapshots: string[];
 }
 
 export interface StateView {

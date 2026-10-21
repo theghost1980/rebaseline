@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SessionError } from '../src/review/session.js';
-import { png } from './helpers.js';
+import { readReport } from '../src/core/report-reader.js';
+import { ReviewSession, SessionError } from '../src/review/session.js';
+import { png, tempDir, writeReport } from './helpers.js';
 import { makeSession } from './review-helpers.js';
 
 describe('ReviewSession', () => {
@@ -83,6 +84,15 @@ describe('ReviewSession', () => {
       pending: 1,
       rejectedNew: [],
     });
+  });
+
+  it('reports new screenshots that Playwright did not save', async () => {
+    const root = tempDir();
+    const report = await readReport(
+      writeReport(tempDir(), [{ title: 'fresh', results: [{ errors: ["Error: A snapshot doesn't exist at /home/runner/work/a/a/shots/fresh.png."] }] }]),
+    );
+    const session = new ReviewSession(report, new Map(), root);
+    expect(session.view().others[0]?.unsavedSnapshots).toEqual(['/home/runner/work/a/a/shots/fresh.png']);
   });
 
   it('serves only images that exist', async () => {

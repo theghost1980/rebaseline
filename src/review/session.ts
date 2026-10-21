@@ -212,5 +212,11 @@ function otherView(failure: Failure): OtherFailureView {
     line: failure.line,
     status: failure.status,
     error: failure.error,
+    unsavedSnapshots: unsavedSnapshots(failure),
   };
+}
+
+/** "Snapshot doesn't exist" paths that came without an image: Playwright did not save them. */
+export function unsavedSnapshots(failure: Failure): string[] {
+  return failure.missingSnapshots.filter((p) => !failure.shots.some((s) => s.missingPath === p));
 }
