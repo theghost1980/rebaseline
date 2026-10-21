@@ -1,5 +1,5 @@
-import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
+import { lstat, mkdir, open, readFile, realpath, rename, rm, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { UserError } from '../lib/errors.js';
 import { isInside, toPosix } from '../lib/paths.js';
@@ -31,8 +31,7 @@ export interface WriteResult {
 
 /**
  * Copies the PNG at `source` to `target` (relative to `root`). Only PNG files
- * inside the repository are written; missing folders are created. Nothing is
- * ever deleted.
+ * inside the repository are written; missing folders are created.
  */
 export async function writeBaseline(root: string, target: string, source: string): Promise<WriteResult> {
   const { file, rel } = await checkTarget(root, target);
@@ -52,6 +51,29 @@ export async function restoreBaseline(root: string, target: string, previous: Bu
     throw new WriterError('bad-source', `Refusing to restore ${rel}: the saved content is not a PNG image`);
   }
   await writeAtomic(file, previous, rel);
+}
+
+/**
+ * Deletes one PNG file inside the repository, only while its content is still
+ * exactly `sha1`. Used to remove a new screenshot the user rejected; the caller
+ * must make sure git does not track the file.
+ */
+export async function deleteNewBaseline(root: string, target: string, sha1: string): Promise<void> {
+  const { file, rel } = await checkTarget(root, target);
+  let data: Buffer;
+  try {
+    data = await readFile(file);
+  } catch (err) {
+    throw ioError(rel, err);
+  }
+  if (createHash('sha1').update(data).digest('hex') !== sha1) {
+    throw new WriterError('bad-source', `Not deleting ${rel}: it changed after the review`);
+  }
+  try {
+    await unlink(file);
+  } catch (err) {
+    throw ioError(rel, err);
+  }
 }
 
 /** Validates a repository-relative target and returns its absolute path. */

@@ -1,5 +1,5 @@
 import { cac } from 'cac';
-import { review } from './commands/review.js';
+import { type ReviewOptions, review } from './commands/review.js';
 import { errorMessage, isUserError } from './lib/errors.js';
 import { log } from './lib/output.js';
 
@@ -9,10 +9,14 @@ const cli = cac('rebaseline');
 
 cli
   .command('review', 'Review failed screenshots in your browser')
+  .usage('review [options] [-- <playwright test options>]')
   .option('--report <dir>', 'Playwright HTML report folder', { default: 'playwright-report' })
+  .option('--run', 'Run the Playwright tests first (options after -- go to Playwright)')
   .option('--port <port>', 'Port for the review page (default: any free port)')
   .option('--no-open', 'Print the address without opening the browser')
-  .action((options: { report?: string; port?: number | string; open?: boolean }) => review(options));
+  .example('  $ rebaseline review')
+  .example('  $ rebaseline review --run -- --project=chromium')
+  .action((options: ReviewOptions) => review(options));
 
 cli.command('[...args]', '').action((args: string[]) => {
   if (args.length > 0) {

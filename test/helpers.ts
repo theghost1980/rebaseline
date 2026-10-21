@@ -56,6 +56,18 @@ export function writeFiles(root: string, files: Record<string, string | Buffer>)
   }
 }
 
+/** Installs a stand-in for @playwright/test in `project`. `script` becomes its CLI. */
+export function installFakePlaywright(project: string, script: string): void {
+  writeFiles(project, {
+    'node_modules/@playwright/test/package.json': JSON.stringify({
+      name: '@playwright/test',
+      version: '0.0.0-test',
+      exports: { './cli': './cli.js', './package.json': './package.json' },
+    }),
+    'node_modules/@playwright/test/cli.js': script,
+  });
+}
+
 export interface FakeAttachment {
   name: string;
   /** Stored as data/<sha1>.png. */
