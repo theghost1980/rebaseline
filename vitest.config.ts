@@ -10,5 +10,7 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     globalSetup: ['test/global-setup.ts'],
+    // Tests that create git repositories are slow on Windows runners.
+    testTimeout: 30_000,
   },
 });

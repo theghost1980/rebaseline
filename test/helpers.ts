@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { strToU8, zipSync } from 'fflate';
-import { afterAll } from 'vitest';
+import { afterAll, afterEach, beforeEach } from 'vitest';
 
 export const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -33,6 +33,19 @@ export function tempDir(): string {
   const dir = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'rebaseline-test-')));
   tempDirs.push(dir);
   return dir;
+}
+
+/** Keeps git from finding a repository above the temporary folders during each test. */
+export function isolateGit(): void {
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.GIT_CEILING_DIRECTORIES;
+    process.env.GIT_CEILING_DIRECTORIES = path.dirname(tempDir());
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.GIT_CEILING_DIRECTORIES;
+    else process.env.GIT_CEILING_DIRECTORIES = saved;
+  });
 }
 
 export function writeFiles(root: string, files: Record<string, string | Buffer>): void {

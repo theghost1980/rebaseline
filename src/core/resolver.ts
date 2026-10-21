@@ -1,21 +1,38 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { isInside, toPosix } from '../lib/paths.js';
-import { listTrackedPngs, repoRoot } from './git.js';
-import type { Failure, Report, Resolution, Shot, ShotKind, UnresolvedReason } from './types.js';
+import { isInside, realPathOf, toPosix } from '../lib/paths.js';
+import { listTrackedPngs, listUntrackedPngs, repoRoot } from './git.js';
+import type { Failure, Report, Resolution, ResolvedVia, Shot, ShotKind, UnresolvedReason } from './types.js';
 
 export interface Baselines {
-  /** Absolute path of the repository root. */
+  /** Real absolute path of the repository root. */
   root: string;
   /** SHA-1 of the content -> paths relative to the root, with forward slashes. */
   index: Map<string, string[]>;
+  /** Same for PNG files git does not track and does not ignore; used only when nothing tracked matches. */
+  untrackedIndex?: Map<string, string[]>;
 }
 
-/** Reads the tracked PNG files under `cwd`. */
-export async function loadBaselines(cwd: string): Promise<Baselines> {
-  const root = await repoRoot(cwd);
-  return { root, index: await hashFiles(root, await listTrackedPngs(cwd)) };
+export interface LoadOptions {
+  /** Folders whose files never count, such as the report being reviewed. */
+  exclude?: string[];
+}
+
+/** Reads the PNG files under `cwd`: tracked ones, plus untracked ones that are not ignored. */
+export async function loadBaselines(cwd: string, options: LoadOptions = {}): Promise<Baselines> {
+  const root = realPathOf(await repoRoot(cwd));
+  const excluded = (options.exclude ?? []).map(realPathOf);
+  const keep = (file: string) => {
+    const abs = path.join(root, file);
+    return !excluded.some((dir) => isInside(dir, abs));
+  };
+  const [tracked, untracked] = await Promise.all([listTrackedPngs(cwd), listUntrackedPngs(cwd)]);
+  return {
+    root,
+    index: await hashFiles(root, tracked.filter(keep)),
+    untrackedIndex: await hashFiles(root, untracked.filter(keep)),
+  };
 }
 
 /** SHA-1 of each file (paths relative to root). Missing files are skipped. */
@@ -58,19 +75,26 @@ export function resolveShot(failure: Pick<Failure, 'projectName'>, shot: Shot, b
 
   if (shot.missingPath !== null) {
     const repoPath = toRepoPath(shot.missingPath, baselines.root);
-    return 'path' in repoPath ? { status: 'resolved', kind, target: repoPath.path } : unresolved(kind, repoPath.reason);
+    return 'path' in repoPath
+      ? { status: 'resolved', kind, target: repoPath.path, via: 'path' }
+      : unresolved(kind, repoPath.reason);
   }
 
   if (!shot.expected?.sha1) return unresolved(kind, 'no-expected-image');
-  const candidates = baselines.index.get(shot.expected.sha1) ?? [];
-  const [only] = candidates;
-  if (candidates.length === 0 || !only) return unresolved(kind, 'no-match');
-  if (candidates.length === 1) return { status: 'resolved', kind, target: only };
+  const tracked = baselines.index.get(shot.expected.sha1) ?? [];
+  if (tracked.length > 0) return choose(tracked, 'tracked', failure, shot);
+  const untracked = baselines.untrackedIndex?.get(shot.expected.sha1) ?? [];
+  if (untracked.length > 0) return choose(untracked, 'untracked', failure, shot);
+  return unresolved(kind, 'no-match');
+}
 
+function choose(candidates: string[], via: ResolvedVia, failure: Pick<Failure, 'projectName'>, shot: Shot): Resolution {
+  const [only] = candidates;
+  if (candidates.length === 1 && only) return { status: 'resolved', kind: 'changed', target: only, via };
   const narrowed = narrowCandidates(candidates, failure.projectName, shot.name);
   const [pick] = narrowed;
-  if (narrowed.length === 1 && pick) return { status: 'resolved', kind, target: pick };
-  return unresolved(kind, 'ambiguous', narrowed.length > 0 ? narrowed : candidates);
+  if (narrowed.length === 1 && pick) return { status: 'resolved', kind: 'changed', target: pick, via };
+  return unresolved('changed', 'ambiguous', narrowed.length > 0 ? narrowed : candidates);
 }
 
 /** Keeps the candidates whose path mentions the project and whose file name starts with the screenshot name. */
@@ -116,9 +140,12 @@ export function toRepoPath(raw: string, root: string): { path: string } | { reas
   if (rel === null) {
     const p = raw.trim();
     if (path.isAbsolute(p)) {
-      const abs = path.resolve(p);
-      if (!isInside(root, abs)) return { reason: 'outside-repo' };
-      rel = path.relative(root, abs);
+      // Compare real paths: the report and git may spell the same folder differently
+      // (Windows short names, links such as /var -> /private/var on macOS).
+      const abs = realPathOf(p);
+      const realRoot = realPathOf(root);
+      if (!isInside(realRoot, abs)) return { reason: 'outside-repo' };
+      rel = path.relative(realRoot, abs);
     } else if (path.win32.isAbsolute(p) || path.posix.isAbsolute(p)) {
       // Absolute on another operating system: the report came from a different machine.
       return { reason: 'outside-repo' };

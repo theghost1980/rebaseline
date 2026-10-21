@@ -44,7 +44,16 @@ export async function repoRoot(cwd: string): Promise<string> {
  * forward slashes. Files inside test output folders are left out.
  */
 export async function listTrackedPngs(cwd: string): Promise<string[]> {
-  const out = await runGit(['-c', 'core.quotepath=off', 'ls-files', '-z', '--full-name', '--', '*.png', '*.PNG'], cwd);
+  return listPngs(cwd, []);
+}
+
+/** Like listTrackedPngs(), for files git does not track and does not ignore. */
+export async function listUntrackedPngs(cwd: string): Promise<string[]> {
+  return listPngs(cwd, ['--others', '--exclude-standard']);
+}
+
+async function listPngs(cwd: string, flags: string[]): Promise<string[]> {
+  const out = await runGit(['-c', 'core.quotepath=off', 'ls-files', '-z', '--full-name', ...flags, '--', '*.png', '*.PNG'], cwd);
   return out
     .split('\0')
     .filter(Boolean)

@@ -69,7 +69,13 @@ export type UnresolvedReason =
   /** The reported path cannot be used as a repository path. */
   | 'invalid-path';
 
+/**
+ * How a target was found: a tracked file, a file git does not track yet, or
+ * the path reported for a new screenshot.
+ */
+export type ResolvedVia = 'tracked' | 'untracked' | 'path';
+
 /** Where an accepted screenshot would be written. */
 export type Resolution =
-  | { status: 'resolved'; kind: ShotKind; target: string }
+  | { status: 'resolved'; kind: ShotKind; target: string; via: ResolvedVia }
   | { status: 'unresolved'; kind: ShotKind; reason: UnresolvedReason; candidates: string[] };
