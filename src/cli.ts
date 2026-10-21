@@ -1,4 +1,5 @@
 import { cac } from 'cac';
+import { type PullOptions, pull } from './commands/pull.js';
 import { type ReviewOptions, review } from './commands/review.js';
 import { errorMessage, isUserError } from './lib/errors.js';
 import { log } from './lib/output.js';
@@ -17,6 +18,18 @@ cli
   .example('  $ rebaseline review')
   .example('  $ rebaseline review --run -- --project=chromium')
   .action((options: ReviewOptions) => review(options));
+
+cli
+  .command('pull', 'Review failed screenshots from a GitHub Actions run (uses the GitHub CLI)')
+  .option('--run <id|url>', 'Workflow run to use (default: the newest run of the current branch with a report)')
+  .option('--pr <number|url>', 'Use the newest run of a pull request')
+  .option('--artifact <name>', 'Report artifact name, * matches any text (default: playwright-report)')
+  .option('--repo <owner/name>', 'GitHub repository (default: from the git remote)')
+  .option('--port <port>', 'Port for the review page (default: any free port)')
+  .option('--no-open', 'Print the address without opening the browser')
+  .example('  $ rebaseline pull')
+  .example('  $ rebaseline pull --pr 42')
+  .action((options: PullOptions) => pull(options));
 
 cli.command('[...args]', '').action((args: string[]) => {
   if (args.length > 0) {
@@ -49,7 +62,7 @@ cli.version(__VERSION__);
 function handleError(err: unknown): void {
   process.exitCode = 1;
   if (isUserError(err)) {
-    log.error(err.message, err.hint);
+    log.error(err.message, err.hint, err.details);
     return;
   }
   // cac throws CACError for unknown options and missing values.

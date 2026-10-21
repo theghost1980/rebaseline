@@ -1,4 +1,4 @@
-import { confirm, isCancel, spinner } from '@clack/prompts';
+import { confirm, isCancel } from '@clack/prompts';
 import { createColors } from 'picocolors';
 
 /*
@@ -38,8 +38,8 @@ export const color = createColors(colorEnabled(process.stdout));
 const errColor = createColors(colorEnabled(process.stderr));
 
 const sym = unicodeEnabled(process.stdout)
-  ? { step: '●', ok: '✔', warn: '▲', bullet: '•' }
-  : { step: '*', ok: '+', warn: '!', bullet: '-' };
+  ? { step: '●', ok: '✔', warn: '▲', bullet: '•', spinner: ['◒', '◐', '◓', '◑'] }
+  : { step: '*', ok: '+', warn: '!', bullet: '-', spinner: ['-', '\\', '|', '/'] };
 // stdout and stderr can be redirected separately, so errors check their own stream.
 const errSym = unicodeEnabled(process.stderr) ? '✖' : 'x';
 
@@ -64,9 +64,10 @@ export const log = {
     write(`${color.yellow(sym.warn)} ${message}`);
     if (hint) write(`  ${color.dim(hint)}`);
   },
-  error(message: string, hint?: string): void {
+  error(message: string, hint?: string, details?: string): void {
     process.stderr.write(`${errColor.red(errSym)} ${message}\n`);
     if (hint) process.stderr.write(`  ${hint}\n`);
+    if (details) process.stderr.write(`\n${details.replace(/\n$/, '')}\n`);
   },
 };
 
@@ -79,17 +80,22 @@ export async function askYesNo(question: string): Promise<boolean> {
   return !isCancel(answer) && answer === true;
 }
 
-/** Shows a spinner while `task` runs, in interactive terminals only. */
+/**
+ * Shows a spinner while `task` runs, in interactive terminals only. It only
+ * writes: a spinner that also reads the keyboard puts the terminal in raw mode,
+ * and on Windows that turns Ctrl+C into a plain key press.
+ */
 export async function withSpinner<T>(message: string, task: () => Promise<T>): Promise<T> {
   if (!interactive) return task();
-  const s = spinner();
-  s.start(message);
+  let frame = 0;
+  const draw = () => process.stdout.write(`\r${color.cyan(sym.spinner[frame++ % sym.spinner.length] ?? '')} ${message}`);
+  draw();
+  const timer = setInterval(draw, 100);
   try {
-    const result = await task();
-    s.clear();
-    return result;
-  } catch (err) {
-    s.clear();
-    throw err;
+    return await task();
+  } finally {
+    clearInterval(timer);
+    // Back to the start of the line and clear it.
+    process.stdout.write('\r\x1b[2K');
   }
 }
