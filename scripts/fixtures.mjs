@@ -9,6 +9,9 @@
 // so no machine paths are committed. On GitHub Actions (GITHUB_ACTIONS=true)
 // paths are kept as they are.
 //
+// Run timings and zip dates are fixed, so regenerating an unchanged project
+// produces the same files byte for byte.
+//
 // Everything is written to a temporary folder first. The previous fixture is
 // only replaced when the new one passes the local data check.
 
@@ -22,6 +25,10 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 const CI_ROOT = '/home/runner/work/rebaseline/rebaseline';
 const ZIP_PREFIX = 'data:application/zip;base64,';
+const FIXED_TIME = '2020-01-01T00:00:00.000Z';
+// Zip entries store local time, so a local date gives the same bytes in every time zone.
+const ZIP_MTIME = new Date(2020, 0, 1);
+const RUN_COUNTERS = new Set(['duration', 'workerIndex', 'parallelIndex']);
 
 const inCI = process.env.GITHUB_ACTIONS === 'true';
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -43,7 +50,11 @@ function readJson(file) {
 }
 
 function playwright(args, uiColor) {
-  const env = { ...process.env, PLAYWRIGHT_HTML_OPEN: 'never' };
+  // Code snippets in the report are only colored when the output is a terminal.
+  // Forcing colors gives the same report from a terminal, a pipe or CI.
+  const env = { ...process.env, PLAYWRIGHT_HTML_OPEN: 'never', FORCE_COLOR: '1' };
+  delete env.NO_COLOR;
+  delete env.DEBUG_COLORS;
   delete env.UI_COLOR;
   delete env.PLAYWRIGHT_HTML_OUTPUT_DIR;
   delete env.PLAYWRIGHT_HTML_REPORT;
@@ -104,6 +115,22 @@ function sanitizeValue(value) {
   return value;
 }
 
+/** Replaces values that change on every run (start times, durations, worker numbers). */
+function fixTimings(value) {
+  if (Array.isArray(value)) return value.map(fixTimings);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => {
+        if (k === 'startTime' && typeof v === 'string') return [k, FIXED_TIME];
+        if (k === 'startTime' && typeof v === 'number') return [k, Date.parse(FIXED_TIME)];
+        if (RUN_COUNTERS.has(k) && typeof v === 'number') return [k, 0];
+        return [k, fixTimings(v)];
+      }),
+    );
+  }
+  return value;
+}
+
 /** Splits a report index.html around its embedded base64 zip. */
 function splitReportHtml(html) {
   const start = html.indexOf(ZIP_PREFIX);
@@ -136,16 +163,18 @@ function saveReport(fromDir, toDir) {
   const { before, b64, after } = splitReportHtml(fs.readFileSync(path.join(fromDir, 'index.html'), 'utf8'));
   const files = unzipSync(new Uint8Array(Buffer.from(b64, 'base64')));
   const cleaned = {};
-  for (const [name, data] of Object.entries(files)) {
+  for (const name of Object.keys(files).sort()) {
+    const data = files[name];
     if (!name.endsWith('.json')) {
       cleaned[name] = data;
       continue;
     }
-    let json = JSON.stringify(sanitizeValue(JSON.parse(strFromU8(data))));
+    let json = JSON.stringify(fixTimings(sanitizeValue(JSON.parse(strFromU8(data)))));
     for (const [from, to] of renamed) json = json.split(JSON.stringify(from)).join(JSON.stringify(to));
     cleaned[name] = strToU8(json);
   }
-  fs.writeFileSync(path.join(toDir, 'index.html'), before + Buffer.from(zipSync(cleaned)).toString('base64') + after);
+  const zip = zipSync(cleaned, { mtime: ZIP_MTIME });
+  fs.writeFileSync(path.join(toDir, 'index.html'), before + Buffer.from(zip).toString('base64') + after);
 }
 
 /**
