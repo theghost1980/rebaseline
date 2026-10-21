@@ -1,3 +1,4 @@
+import { confirm, isCancel, spinner } from '@clack/prompts';
 import { createColors } from 'picocolors';
 
 /*
@@ -68,3 +69,27 @@ export const log = {
     if (hint) process.stderr.write(`  ${hint}\n`);
   },
 };
+
+/** True when the user can answer questions here. */
+export const canAsk = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+
+/** Asks a yes/no question; "no" is the default. Only call it when canAsk is true. */
+export async function askYesNo(question: string): Promise<boolean> {
+  const answer = await confirm({ message: question, initialValue: false });
+  return !isCancel(answer) && answer === true;
+}
+
+/** Shows a spinner while `task` runs, in interactive terminals only. */
+export async function withSpinner<T>(message: string, task: () => Promise<T>): Promise<T> {
+  if (!interactive) return task();
+  const s = spinner();
+  s.start(message);
+  try {
+    const result = await task();
+    s.clear();
+    return result;
+  } catch (err) {
+    s.clear();
+    throw err;
+  }
+}

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { strToU8, zipSync } from 'fflate';
-import { afterAll } from 'vitest';
+import { afterAll, afterEach, beforeEach } from 'vitest';
 
 export const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -35,12 +35,37 @@ export function tempDir(): string {
   return dir;
 }
 
+/** Keeps git from finding a repository above the temporary folders during each test. */
+export function isolateGit(): void {
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.GIT_CEILING_DIRECTORIES;
+    process.env.GIT_CEILING_DIRECTORIES = path.dirname(tempDir());
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.GIT_CEILING_DIRECTORIES;
+    else process.env.GIT_CEILING_DIRECTORIES = saved;
+  });
+}
+
 export function writeFiles(root: string, files: Record<string, string | Buffer>): void {
   for (const [rel, content] of Object.entries(files)) {
     const file = path.join(root, rel);
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, content);
   }
+}
+
+/** Installs a stand-in for @playwright/test in `project`. `script` becomes its CLI. */
+export function installFakePlaywright(project: string, script: string): void {
+  writeFiles(project, {
+    'node_modules/@playwright/test/package.json': JSON.stringify({
+      name: '@playwright/test',
+      version: '0.0.0-test',
+      exports: { './cli': './cli.js', './package.json': './package.json' },
+    }),
+    'node_modules/@playwright/test/cli.js': script,
+  });
 }
 
 export interface FakeAttachment {

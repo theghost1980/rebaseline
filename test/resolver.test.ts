@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, realpathSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readReport } from '../src/core/report-reader.js';
@@ -12,6 +12,7 @@ import {
   stripRunnerPrefix,
   toRepoPath,
 } from '../src/core/resolver.js';
+import { realPathOf } from '../src/lib/paths.js';
 import type { Shot } from '../src/core/types.js';
 import { fixtureDir, png, sha1, tempDir, writeFiles } from './helpers.js';
 
@@ -68,14 +69,14 @@ describe('resolveReport with the saved Playwright 1.64.1 report', async () => {
     ['default', 'two screenshots in one test', 'tests/visual.spec.ts-snapshots/first-default-win32.png'],
     ['custom', 'two screenshots in one test', 'tests/__screenshots__/custom/visual.spec.ts/first.png'],
   ])('resolves the changed screenshot of %s / %s', (project, title, target) => {
-    expect(targetOf(project, title)).toEqual({ status: 'resolved', kind: 'changed', target: `${PROJECT}/${target}` });
+    expect(targetOf(project, title)).toEqual({ status: 'resolved', kind: 'changed', target: `${PROJECT}/${target}`, via: 'tracked' });
   });
 
   it.each([
     ['default', 'tests/visual.spec.ts-snapshots/brand-new-default-win32.png'],
     ['custom', 'tests/__screenshots__/custom/visual.spec.ts/brand-new.png'],
   ])('resolves the new screenshot of %s from the reported path', (project, target) => {
-    expect(targetOf(project, 'new screenshot')).toEqual({ status: 'resolved', kind: 'new', target: `${PROJECT}/${target}` });
+    expect(targetOf(project, 'new screenshot')).toEqual({ status: 'resolved', kind: 'new', target: `${PROJECT}/${target}`, via: 'path' });
   });
 
   it('resolves every screenshot in the report', () => {
@@ -140,6 +141,21 @@ describe('toRepoPath', () => {
     expect(toRepoPath('tests/x.png', tempDir())).toEqual({ reason: 'invalid-path' });
     expect(toRepoPath('/home/runner/work/app/app/../../etc/x.png', tempDir())).toEqual({ reason: 'invalid-path' });
   });
+
+  it('compares real paths when the repository is reached through a link', (ctx) => {
+    const base = tempDir();
+    const real = path.join(base, 'real-repo');
+    const link = path.join(base, 'linked-repo');
+    mkdirSync(real);
+    try {
+      symlinkSync(real, link, 'junction');
+    } catch {
+      ctx.skip();
+    }
+    expect(toRepoPath(path.join(link, 'e2e', 'shots', 'new.png'), real)).toEqual({ path: 'e2e/shots/new.png' });
+    expect(toRepoPath(path.join(real, 'e2e', 'shots', 'new.png'), link)).toEqual({ path: 'e2e/shots/new.png' });
+    expect(realPathOf(path.join(link, 'not', 'there.png'))).toBe(path.join(realpathSync.native(real), 'not', 'there.png'));
+  });
 });
 
 describe('resolveShot', () => {
@@ -149,7 +165,7 @@ describe('resolveShot', () => {
 
   it('resolves a single match even when its name is different', () => {
     const result = resolveShot({ projectName: 'chromium' }, shot({}), baselines({ [expectedHash]: ['shots/renamed.png'] }));
-    expect(result).toEqual({ status: 'resolved', kind: 'changed', target: 'shots/renamed.png' });
+    expect(result).toEqual({ status: 'resolved', kind: 'changed', target: 'shots/renamed.png', via: 'tracked' });
   });
 
   it('breaks ties with the project name and the screenshot name', () => {
@@ -158,6 +174,7 @@ describe('resolveShot', () => {
       status: 'resolved',
       kind: 'changed',
       target: 'a/firefox/hero.png',
+      via: 'tracked',
     });
   });
 
@@ -187,6 +204,28 @@ describe('resolveShot', () => {
     });
   });
 
+  it('falls back to untracked files only when no tracked file matches', () => {
+    const untrackedOnly: Baselines = { root, index: new Map(), untrackedIndex: new Map([[expectedHash, ['shots/hero.png']]]) };
+    expect(resolveShot({ projectName: 'chromium' }, shot({}), untrackedOnly)).toEqual({
+      status: 'resolved',
+      kind: 'changed',
+      target: 'shots/hero.png',
+      via: 'untracked',
+    });
+    const both: Baselines = {
+      root,
+      index: new Map([[expectedHash, ['shots/tracked.png']]]),
+      untrackedIndex: new Map([[expectedHash, ['shots/untracked.png']]]),
+    };
+    expect(resolveShot({ projectName: 'chromium' }, shot({}), both)).toMatchObject({ target: 'shots/tracked.png', via: 'tracked' });
+  });
+
+  it('breaks ties among untracked files the same way', () => {
+    const files = ['a/chromium/hero.png', 'b/chromium/hero.png'];
+    const untracked: Baselines = { root, index: new Map(), untrackedIndex: new Map([[expectedHash, files]]) };
+    expect(resolveShot({ projectName: 'chromium' }, shot({}), untracked)).toMatchObject({ status: 'unresolved', reason: 'ambiguous' });
+  });
+
   it('reports when nothing matches', () => {
     expect(resolveShot({ projectName: 'chromium' }, shot({}), baselines({}))).toMatchObject({ status: 'unresolved', reason: 'no-match' });
   });
@@ -210,6 +249,7 @@ describe('resolveShot', () => {
       status: 'resolved',
       kind: 'new',
       target: 'e2e/new.png',
+      via: 'path',
     });
   });
 

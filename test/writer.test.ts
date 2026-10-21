@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WriterError, checkTarget, restoreBaseline, writeBaseline } from '../src/core/writer.js';
-import { png, tempDir, writeFiles } from './helpers.js';
+import { WriterError, checkTarget, deleteNewBaseline, restoreBaseline, writeBaseline } from '../src/core/writer.js';
+import { png, sha1, tempDir, writeFiles } from './helpers.js';
 
 function setup() {
   const base = tempDir();
@@ -137,6 +137,37 @@ describe('restoreBaseline', () => {
     const { root } = setup();
     expect((await rejection(restoreBaseline(root, '../hero.png', png('x')))).code).toBe('invalid-path');
     expect((await rejection(restoreBaseline(root, 'hero.png', Buffer.from('not a png')))).code).toBe('bad-source');
+  });
+});
+
+describe('deleteNewBaseline', () => {
+  it('deletes the file when it still has the expected content', async () => {
+    const { root } = setup();
+    writeFiles(root, { 'shots/new.png': png('new') });
+    await deleteNewBaseline(root, 'shots/new.png', sha1(png('new')));
+    expect(existsSync(path.join(root, 'shots', 'new.png'))).toBe(false);
+  });
+
+  it('keeps the file when its content changed', async () => {
+    const { root } = setup();
+    writeFiles(root, { 'shots/new.png': png('edited') });
+    expect((await rejection(deleteNewBaseline(root, 'shots/new.png', sha1(png('new'))))).code).toBe('bad-source');
+    expect(existsSync(path.join(root, 'shots', 'new.png'))).toBe(true);
+  });
+
+  it('applies the same path checks as writing', async () => {
+    const { base, root } = setup();
+    writeFiles(base, { 'outside.png': png('x') });
+    writeFiles(root, { 'notes.txt': 'x', '.git/x.png': png('x') });
+    expect((await rejection(deleteNewBaseline(root, '../outside.png', sha1(png('x'))))).code).toBe('invalid-path');
+    expect((await rejection(deleteNewBaseline(root, 'notes.txt', sha1('x')))).code).toBe('not-png');
+    expect((await rejection(deleteNewBaseline(root, '.git/x.png', sha1(png('x'))))).code).toBe('invalid-path');
+    expect(existsSync(path.join(base, 'outside.png'))).toBe(true);
+  });
+
+  it('reports a file that is already gone', async () => {
+    const { root } = setup();
+    expect((await rejection(deleteNewBaseline(root, 'shots/gone.png', sha1(png('x'))))).code).toBe('io');
   });
 });
 

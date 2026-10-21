@@ -16,7 +16,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.ui.json",
     "fixtures": "node scripts/fixtures.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },

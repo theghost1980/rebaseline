@@ -1,10 +1,22 @@
 import { cac } from 'cac';
+import { type ReviewOptions, review } from './commands/review.js';
 import { errorMessage, isUserError } from './lib/errors.js';
 import { log } from './lib/output.js';
 
 const ISSUES_URL = 'https://github.com/theghost1980/rebaseline/issues';
 
 const cli = cac('rebaseline');
+
+cli
+  .command('review', 'Review failed screenshots in your browser')
+  .usage('review [options] [-- <playwright test options>]')
+  .option('--report <dir>', 'Playwright HTML report folder', { default: 'playwright-report' })
+  .option('--run', 'Run the Playwright tests first (options after -- go to Playwright)')
+  .option('--port <port>', 'Port for the review page (default: any free port)')
+  .option('--no-open', 'Print the address without opening the browser')
+  .example('  $ rebaseline review')
+  .example('  $ rebaseline review --run -- --project=chromium')
+  .action((options: ReviewOptions) => review(options));
 
 cli.command('[...args]', '').action((args: string[]) => {
   if (args.length > 0) {
@@ -21,6 +33,8 @@ cli.help((sections) => {
     if (section.title === 'Usage' && section.body.includes('[...args]')) {
       section.body = '  $ rebaseline <command> [options]';
     }
+    // cac prints "(default: true)" for every --no-* flag, which reads backwards.
+    section.body = section.body.replace(/^(\s*--no-\S+.*?)\s*\(default: true\)/gm, '$1');
     if (section.title === 'Commands') {
       section.body = section.body
         .split('\n')
