@@ -29,10 +29,11 @@ jobs:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v7
-      - run: node --version
-      # Only the fixture script runs here, so install scripts are not needed.
-      - run: npm ci --ignore-scripts
-      - run: npm install --no-save --ignore-scripts @playwright/test@${{ matrix.playwright }}
+      - run: node --version && npm --version
+      # Only the fixture script runs here: it needs fflate and Playwright, not the
+      # dev tools, so install scripts and peer checks of the dev tools are skipped.
+      - run: npm ci --ignore-scripts --legacy-peer-deps
+      - run: npm install --no-save --ignore-scripts --legacy-peer-deps @playwright/test@${{ matrix.playwright }}
       - run: npm run fixtures
       - uses: actions/upload-artifact@v7
         with:
