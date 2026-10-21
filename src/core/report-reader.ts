@@ -38,11 +38,29 @@ export async function readReport(dir: string): Promise<Report> {
     if (failure) failures.push(failure);
   }
 
+  return { dir: reportDir, projectNames, failures: sortFailures(failures, projectNames) };
+}
+
+/** Joins the reports of several shards into one. Ids stay unique. */
+export function mergeReports(reports: Report[], dir: string): Report {
+  const projectNames = [...new Set(reports.flatMap((r) => r.projectNames))];
+  const usedIds = new Set<string>();
+  const failures = reports
+    .flatMap((r) => r.failures)
+    .map((f) => {
+      const id = uniqueId(f.id, usedIds);
+      return id === f.id ? f : { ...f, id, shots: f.shots.map((s, i) => ({ ...s, id: `${id}:${i}` })) };
+    });
+  return { dir, projectNames, failures: sortFailures(failures, projectNames) };
+}
+
+/** Project order of the config, then file and position. */
+function sortFailures(failures: Failure[], projectNames: string[]): Failure[] {
   const projectOrder = (name: string) => {
     const i = projectNames.indexOf(name);
     return i === -1 ? projectNames.length : i;
   };
-  failures.sort(
+  return failures.sort(
     (a, b) =>
       projectOrder(a.projectName) - projectOrder(b.projectName) ||
       a.projectName.localeCompare(b.projectName) ||
@@ -51,8 +69,6 @@ export async function readReport(dir: string): Promise<Report> {
       a.column - b.column ||
       a.title.localeCompare(b.title),
   );
-
-  return { dir: reportDir, projectNames, failures };
 }
 
 async function unpack(reportDir: string): Promise<Map<string, Uint8Array>> {
