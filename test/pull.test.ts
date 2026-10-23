@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { runGit } from '../src/core/git.js';
 import { mergeReports } from '../src/core/report-reader.js';
 import type { Failure, Report } from '../src/core/types.js';
-import { formatBytes, timeAgo } from '../src/lib/format.js';
+import { formatBytes, formatDuration, timeAgo } from '../src/lib/format.js';
 import { runGh } from '../src/pull/gh.js';
 import { currentBranch, findRepo, parseRemoteUrl, parseRepoName, repoName } from '../src/pull/repo.js';
 import { type Artifact, parsePullRequestReference, parseRunReference, selectReportArtifacts } from '../src/pull/runs.js';
@@ -141,6 +141,12 @@ describe('formatting', () => {
     expect(formatBytes(2500)).toBe('2.4 KB');
     expect(formatBytes(2_500_000)).toBe('2.4 MB');
     expect(formatBytes(3 * 1024 ** 3)).toBe('3.00 GB');
+  });
+
+  it('formats elapsed time', () => {
+    expect(formatDuration(0)).toBe('0s');
+    expect(formatDuration(42_900)).toBe('42s');
+    expect(formatDuration(185_000)).toBe('3m 05s');
   });
 
   it('says how long ago', () => {
