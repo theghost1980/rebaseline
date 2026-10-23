@@ -3,6 +3,7 @@ import { lstat, mkdir, open, readFile, realpath, rename, rm, stat, unlink } from
 import path from 'node:path';
 import { UserError } from '../lib/errors.js';
 import { isInside, toPosix } from '../lib/paths.js';
+import { lfsPointerOid } from './lfs.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -44,10 +45,10 @@ export async function writeBaseline(root: string, target: string, source: string
   return { target: rel, file, created: previous === null, previous };
 }
 
-/** Puts back the content returned by writeBaseline() in `previous`. */
+/** Puts back the content returned by writeBaseline() in `previous`: a PNG image or a Git LFS pointer to one. */
 export async function restoreBaseline(root: string, target: string, previous: Buffer): Promise<void> {
   const { file, rel } = await checkTarget(root, target);
-  if (!previous.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+  if (!previous.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) && lfsPointerOid(previous) === null) {
     throw new WriterError('bad-source', `Refusing to restore ${rel}: the saved content is not a PNG image`);
   }
   await writeAtomic(file, previous, rel);

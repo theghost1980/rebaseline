@@ -15,7 +15,7 @@ import {
 } from '../src/core/resolver.js';
 import { realPathOf } from '../src/lib/paths.js';
 import type { Shot } from '../src/core/types.js';
-import { fixtureDir, png, sha1, tempDir, writeFiles } from './helpers.js';
+import { fixtureDir, png, sha1, sha256, tempDir, writeFiles } from './helpers.js';
 
 const PROJECT = 'fixtures/pw-project';
 
@@ -220,6 +220,28 @@ describe('resolveShot', () => {
   it('never uses the system to choose between different screenshots', () => {
     const files = ['s/logo-firefox-linux.png', 's/icon-webkit-win32.png'];
     expect(resolveShot({ projectName: 'chromium' }, shot({}), baselines({ [expectedHash]: files }), 'linux')).toMatchObject({ reason: 'ambiguous' });
+  });
+
+  it('finds a Git LFS pointer by the SHA-256 of the expected image', () => {
+    const lfsOnly: Baselines = { root, index: new Map(), lfsIndex: new Map([[sha256('expected'), ['shots/hero.png']]]) };
+    expect(resolveShot({ projectName: 'chromium' }, shot({ expected: { file: 'e.png', sha1: expectedHash, sha256: sha256('expected') } }), lfsOnly)).toEqual({
+      status: 'resolved',
+      kind: 'changed',
+      target: 'shots/hero.png',
+      via: 'lfs',
+    });
+  });
+
+  it('lets Git LFS pointers and downloaded images compete with the usual tie-breaks', () => {
+    // The same image is downloaded for firefox; the chromium baseline is only a pointer.
+    const mixed: Baselines = {
+      root,
+      index: new Map([[expectedHash, ['a/firefox/hero.png']]]),
+      lfsIndex: new Map([[sha256('expected'), ['a/chromium/hero.png']]]),
+    };
+    const withSha256 = shot({ expected: { file: 'e.png', sha1: expectedHash, sha256: sha256('expected') } });
+    expect(resolveShot({ projectName: 'chromium' }, withSha256, mixed)).toMatchObject({ status: 'resolved', target: 'a/chromium/hero.png', via: 'lfs' });
+    expect(resolveShot({ projectName: 'firefox' }, withSha256, mixed)).toMatchObject({ status: 'resolved', target: 'a/firefox/hero.png', via: 'tracked' });
   });
 
   it('lists every candidate when none of them fits the project and name', () => {

@@ -22,6 +22,15 @@ export function sha1(data: Buffer | string): string {
   return createHash('sha1').update(data).digest('hex');
 }
 
+export function sha256(data: Buffer | string): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+/** The Git LFS pointer git keeps in place of `data` when the image is not downloaded. */
+export function lfsPointer(data: Buffer): string {
+  return `version https://git-lfs.github.com/spec/v1\noid sha256:${sha256(data)}\nsize ${data.length}\n`;
+}
+
 const tempDirs: string[] = [];
 afterAll(() => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });

@@ -21,8 +21,8 @@ export interface ShotView {
   kind: 'changed' | 'new';
   /** Repository path that accepting writes, when it is known. */
   target: string | null;
-  /** "untracked" when the file exists but git does not track it yet. */
-  via: 'tracked' | 'untracked' | 'path' | null;
+  /** "untracked" when the file exists but git does not track it yet; "lfs" when it is a Git LFS pointer. */
+  via: 'tracked' | 'lfs' | 'untracked' | 'path' | null;
   /** Why the screenshot cannot be accepted. */
   unresolved: { reason: string; message: string; candidates: string[] } | null;
   images: Record<ImageKind, boolean>;
