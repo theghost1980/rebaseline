@@ -118,10 +118,17 @@ function failure(id: string, projectName: string, file: string): Failure {
 
 describe('joining the reports of several shards', () => {
   it('keeps every failure with unique ids, in project order', () => {
-    const a: Report = { dir: '/a', projectNames: ['desktop', 'mobile'], failures: [failure('t1', 'mobile', 'a.spec.ts')] };
-    const b: Report = { dir: '/b', projectNames: ['desktop', 'mobile'], failures: [failure('t1', 'desktop', 'b.spec.ts'), failure('t2', 'desktop', 'a.spec.ts')] };
+    const a: Report = { dir: '/a', projectNames: ['desktop', 'mobile'], failures: [failure('t1', 'mobile', 'a.spec.ts')], platform: 'linux' };
+    const b: Report = {
+      dir: '/b',
+      projectNames: ['desktop', 'mobile'],
+      failures: [failure('t1', 'desktop', 'b.spec.ts'), failure('t2', 'desktop', 'a.spec.ts')],
+      platform: 'linux',
+    };
     const merged = mergeReports([a, b], '/all');
     expect(merged.dir).toBe('/all');
+    expect(merged.platform).toBe('linux');
+    expect(mergeReports([a, { ...b, platform: null }], '/all').platform).toBeNull();
     expect(merged.projectNames).toEqual(['desktop', 'mobile']);
     expect(merged.failures.map((f) => `${f.projectName} ${f.file} ${f.id}`)).toEqual(['desktop a.spec.ts t2', 'desktop b.spec.ts t1-2', 'mobile a.spec.ts t1']);
     expect(merged.failures.flatMap((f) => f.shots.map((s) => s.id))).toEqual(['t2:0', 't1-2:0', 't1:0']);

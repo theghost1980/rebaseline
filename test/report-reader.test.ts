@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ReportError, readReport } from '../src/core/report-reader.js';
+import { ReportError, readReport, reportPlatform } from '../src/core/report-reader.js';
 import type { Failure, Report } from '../src/core/types.js';
 import { fixtureDir, png, sha1, tempDir, writeFiles, writeReport } from './helpers.js';
 
@@ -227,5 +227,52 @@ describe('readReport edge cases', () => {
     const shot = (await readReport(dir)).failures[0]?.shots[0];
     expect(shot?.actual.sha1).toBeNull();
     expect(shot?.actual.file).toBe(path.join(dir, 'data', '0000.png'));
+  });
+});
+
+describe('reportPlatform', () => {
+  function shotFailure(error: string, withShot = true): Failure {
+    const image = { file: '/r/a.png', sha1: 'a' };
+    return {
+      id: 't',
+      title: 't',
+      titlePath: ['t'],
+      projectName: 'chromium',
+      file: 'a.spec.ts',
+      line: 1,
+      column: 1,
+      status: 'failed',
+      retries: 0,
+      error,
+      shots: withShot ? [{ id: 't:0', name: 'hero', actual: image, expected: image, diff: null, missingPath: null }] : [],
+      missingSnapshots: [],
+      stoppedAtScreenshot: false,
+    };
+  }
+
+  it.each([
+    ['a snapshot file name', "A snapshot doesn't exist at /__w/app/app/tests/a.spec.ts-snapshots/hero-chromium-linux.png, writing actual.", 'linux'],
+    ['the expected path of older versions', 'Expected: /Users/runner/work/app/app/tests/a.spec.ts-snapshots/hero-chromium-darwin.png', 'darwin'],
+    ['a Windows stack trace', '    at C:\\work\\app\\tests\\a.spec.ts:17:36', 'win32'],
+    ['a macOS stack trace', '    at /Users/me/app/tests/a.spec.ts:17:36', 'darwin'],
+    ['a Linux stack trace', '    at /home/me/app/tests/a.spec.ts:17:36', 'linux'],
+  ])('finds the system in %s', (_, error, platform) => {
+    expect(reportPlatform([shotFailure(error)])).toBe(platform);
+  });
+
+  it('prefers snapshot file names to the shape of paths', () => {
+    // Saved fixtures rewrite Windows paths to /home/runner/..., but keep the file names.
+    const error = "A snapshot doesn't exist at /home/runner/work/a/a/shots/hero-chromium-win32.png, writing actual.\n    at /home/runner/work/a/a/a.spec.ts:3:1";
+    expect(reportPlatform([shotFailure(error)])).toBe('win32');
+  });
+
+  it('gives no answer without clues or with clues that disagree', () => {
+    expect(reportPlatform([shotFailure('3200 pixels (ratio 1.00 of all image pixels) are different.')])).toBeNull();
+    expect(reportPlatform([shotFailure('Expected pattern: /Welcome back/ at http://localhost:3000/home.js')])).toBeNull();
+    expect(reportPlatform([shotFailure('    at C:\\app\\a.spec.ts:1:1'), shotFailure('    at /home/me/app/a.spec.ts:1:1')])).toBeNull();
+  });
+
+  it('only looks at screenshot failures', () => {
+    expect(reportPlatform([shotFailure('    at C:\\app\\a.spec.ts:1:1', false), shotFailure('    at /home/me/app/a.spec.ts:1:1')])).toBe('linux');
   });
 });
