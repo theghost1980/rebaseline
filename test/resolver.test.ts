@@ -6,6 +6,7 @@ import {
   type Baselines,
   hashFiles,
   narrowCandidates,
+  narrowToPlatform,
   projectPathName,
   resolveReport,
   resolveShot,
@@ -82,6 +83,14 @@ describe('resolveReport with the saved Playwright 1.64.1 report', async () => {
   it('resolves every screenshot in the report', () => {
     expect([...resolutions.values()].every((r) => r.status === 'resolved')).toBe(true);
     expect(resolutions.size).toBe(8);
+  });
+});
+
+describe('narrowToPlatform', () => {
+  it('keeps the paths that name the system as a whole word', () => {
+    const files = ['s/hero-chromium-linux.png', 's/linux/hero.png', 's/hero-chromium-win32.png', 's/hero-linuxish.png'];
+    expect(narrowToPlatform(files, 'linux')).toEqual(['s/hero-chromium-linux.png', 's/linux/hero.png']);
+    expect(narrowToPlatform(files, null)).toEqual([]);
   });
 });
 
@@ -194,6 +203,23 @@ describe('resolveShot', () => {
       reason: 'ambiguous',
       candidates: ['a/chromium/hero.png', 'b/chromium/hero.png'],
     });
+  });
+
+  it('chooses among identical baselines of several systems with the system of the report', () => {
+    const files = ['s/hero-chromium-darwin.png', 's/hero-chromium-linux.png', 's/hero-chromium-win32.png'];
+    const index = baselines({ [expectedHash]: files });
+    expect(resolveShot({ projectName: 'chromium' }, shot({}), index, 'linux')).toEqual({
+      status: 'resolved',
+      kind: 'changed',
+      target: 's/hero-chromium-linux.png',
+      via: 'tracked',
+    });
+    expect(resolveShot({ projectName: 'chromium' }, shot({}), index, null)).toMatchObject({ reason: 'ambiguous', candidates: files });
+  });
+
+  it('never uses the system to choose between different screenshots', () => {
+    const files = ['s/logo-firefox-linux.png', 's/icon-webkit-win32.png'];
+    expect(resolveShot({ projectName: 'chromium' }, shot({}), baselines({ [expectedHash]: files }), 'linux')).toMatchObject({ reason: 'ambiguous' });
   });
 
   it('lists every candidate when none of them fits the project and name', () => {

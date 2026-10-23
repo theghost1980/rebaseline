@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isInside, realPathOf, toPosix } from '../lib/paths.js';
 import { listTrackedPngs, listUntrackedPngs, repoRoot } from './git.js';
-import type { Failure, Report, Resolution, ResolvedVia, Shot, ShotKind, UnresolvedReason } from './types.js';
+import type { Failure, Platform, Report, Resolution, ResolvedVia, Shot, ShotKind, UnresolvedReason } from './types.js';
 
 export interface Baselines {
   /** Real absolute path of the repository root. */
@@ -63,13 +63,16 @@ export async function hashFiles(root: string, files: string[], concurrency = 16)
 export function resolveReport(report: Report, baselines: Baselines): Map<string, Resolution> {
   const out = new Map<string, Resolution>();
   for (const failure of report.failures) {
-    for (const shot of failure.shots) out.set(shot.id, resolveShot(failure, shot, baselines));
+    for (const shot of failure.shots) out.set(shot.id, resolveShot(failure, shot, baselines, report.platform));
   }
   return out;
 }
 
-/** Decides which repository file an accepted screenshot replaces or creates. */
-export function resolveShot(failure: Pick<Failure, 'projectName'>, shot: Shot, baselines: Baselines): Resolution {
+/**
+ * Decides which repository file an accepted screenshot replaces or creates.
+ * `platform` is the system the report was made on, used as the last tie-break.
+ */
+export function resolveShot(failure: Pick<Failure, 'projectName'>, shot: Shot, baselines: Baselines, platform: Platform | null = null): Resolution {
   const kind: ShotKind = shot.missingPath !== null ? 'new' : 'changed';
   if (shot.actual.sha1 === null) return unresolved(kind, 'missing-image');
 
@@ -82,19 +85,30 @@ export function resolveShot(failure: Pick<Failure, 'projectName'>, shot: Shot, b
 
   if (!shot.expected?.sha1) return unresolved(kind, 'no-expected-image');
   const tracked = baselines.index.get(shot.expected.sha1) ?? [];
-  if (tracked.length > 0) return choose(tracked, 'tracked', failure, shot);
+  if (tracked.length > 0) return choose(tracked, 'tracked', failure, shot, platform);
   const untracked = baselines.untrackedIndex?.get(shot.expected.sha1) ?? [];
-  if (untracked.length > 0) return choose(untracked, 'untracked', failure, shot);
+  if (untracked.length > 0) return choose(untracked, 'untracked', failure, shot, platform);
   return unresolved(kind, 'no-match');
 }
 
-function choose(candidates: string[], via: ResolvedVia, failure: Pick<Failure, 'projectName'>, shot: Shot): Resolution {
+function choose(candidates: string[], via: ResolvedVia, failure: Pick<Failure, 'projectName'>, shot: Shot, platform: Platform | null): Resolution {
   const [only] = candidates;
   if (candidates.length === 1 && only) return { status: 'resolved', kind: 'changed', target: only, via };
   const narrowed = narrowCandidates(candidates, failure.projectName, shot.name);
   const [pick] = narrowed;
   if (narrowed.length === 1 && pick) return { status: 'resolved', kind: 'changed', target: pick, via };
+  // Identical baselines of several operating systems: take the one of the system the report came from.
+  const forPlatform = narrowed.length > 1 ? narrowToPlatform(narrowed, platform) : [];
+  const [platformPick] = forPlatform;
+  if (forPlatform.length === 1 && platformPick) return { status: 'resolved', kind: 'changed', target: platformPick, via };
   return unresolved('changed', 'ambiguous', narrowed.length > 0 ? narrowed : candidates);
+}
+
+/** The candidates whose path names `platform`, as in hero-chromium-linux.png or shots/linux/hero.png. */
+export function narrowToPlatform(candidates: string[], platform: Platform | null): string[] {
+  if (!platform) return [];
+  const token = new RegExp(`(?:^|[/._-])${platform}(?:[/._-]|$)`, 'i');
+  return candidates.filter((c) => token.test(c));
 }
 
 /** Keeps the candidates whose path mentions the project and whose file name starts with the screenshot name. */

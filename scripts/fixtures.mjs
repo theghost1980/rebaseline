@@ -12,6 +12,10 @@
 // Run timings and zip dates are fixed, so regenerating an unchanged project
 // produces the same files byte for byte.
 //
+// It works with Playwright 1.40 and later: CI installs other versions over the
+// project's one (see .github/workflows/fixtures.yml), so it only uses options
+// all of them understand.
+//
 // Everything is written to a temporary folder first. The previous fixture is
 // only replaced when the new one passes the local data check.
 
@@ -223,8 +227,10 @@ function replaceDir(from, to) {
 }
 
 function main() {
-  // 1. Baselines. "changed" writes missing and different snapshots and leaves identical ones untouched.
-  if (playwright(['test', '--update-snapshots=changed', '--grep-invert', '@new', '--reporter=list']) !== 0) {
+  // 1. Baselines, without the "new screenshot" test so it never has one. A bare
+  //    --update-snapshots means "changed" since 1.50 (identical files are left
+  //    untouched) and "all" before; both give the same baselines.
+  if (playwright(['test', '--grep-invert', 'new screenshot', '--reporter=list', '--update-snapshots']) !== 0) {
     fail('generating the baselines failed. If the browser is missing, run: npx playwright install --only-shell chromium');
   }
   const baselines = listPngs(projectDir);
@@ -238,8 +244,9 @@ function main() {
       fs.copyFileSync(path.join(projectDir, rel), dest);
     }
 
-    // 2. Failures. Retries exercise "use the last result".
-    const status = playwright(['test', '--retries=1'], 'changed');
+    // 2. Failures. Retries exercise "use the last result". One worker keeps the
+    //    order of tests, and so the steps each one reports, the same every time.
+    const status = playwright(['test', '--retries=1', '--workers=1'], 'changed');
 
     // Playwright writes missing snapshots next to the baselines even when the test fails.
     // Remove only those freshly written files so the fixture project matches git again.

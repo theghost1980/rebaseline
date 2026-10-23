@@ -45,11 +45,16 @@ export interface Failure {
   stoppedAtScreenshot: boolean;
 }
 
+/** Operating systems as Playwright writes them in snapshot file names. */
+export type Platform = 'linux' | 'darwin' | 'win32';
+
 export interface Report {
   /** Absolute path of the report folder. */
   dir: string;
   projectNames: string[];
   failures: Failure[];
+  /** Operating system the tests ran on, when the report tells. Chooses among identical baselines of several systems. */
+  platform: Platform | null;
 }
 
 /** "changed" replaces an existing baseline; "new" creates one. */

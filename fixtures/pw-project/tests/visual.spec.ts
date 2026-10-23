@@ -35,7 +35,7 @@ test('two screenshots in one test', async ({ page: p }) => {
   await expect(p.locator('#second')).toHaveScreenshot('second.png');
 });
 
-test('new screenshot', { tag: '@new' }, async ({ page: p }) => {
+test('new screenshot', async ({ page: p }) => {
   await p.setContent(page(box('fresh', '#0f766e', 60, 60)));
   await expect(p.locator('#fresh')).toHaveScreenshot('brand-new.png');
 });

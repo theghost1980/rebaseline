@@ -5,7 +5,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { strFromU8, unzipSync } from 'fflate';
 import { UserError } from '../lib/errors.js';
 import { displayPath, isInside, toPosix } from '../lib/paths.js';
-import type { Failure, Report, ReportImage, Shot } from './types.js';
+import type { Failure, Platform, Report, ReportImage, Shot } from './types.js';
 
 const ZIP_PATTERN = /data:application\/zip;base64,([A-Za-z0-9+/=]+)/;
 const ACTUAL_SUFFIX = '-actual.png';
@@ -38,7 +38,7 @@ export async function readReport(dir: string): Promise<Report> {
     if (failure) failures.push(failure);
   }
 
-  return { dir: reportDir, projectNames, failures: sortFailures(failures, projectNames) };
+  return { dir: reportDir, projectNames, failures: sortFailures(failures, projectNames), platform: reportPlatform(failures) };
 }
 
 /** Joins the reports of several shards into one. Ids stay unique. */
@@ -51,7 +51,40 @@ export function mergeReports(reports: Report[], dir: string): Report {
       const id = uniqueId(f.id, usedIds);
       return id === f.id ? f : { ...f, id, shots: f.shots.map((s, i) => ({ ...s, id: `${id}:${i}` })) };
     });
-  return { dir, projectNames, failures: sortFailures(failures, projectNames) };
+  const platforms = new Set(reports.map((r) => r.platform));
+  return {
+    dir,
+    projectNames,
+    failures: sortFailures(failures, projectNames),
+    platform: platforms.size === 1 ? (reports[0]?.platform ?? null) : null,
+  };
+}
+
+/** Absolute file paths in error text: C:\... or /..., not part of a URL, ending in a file name. */
+const ABSOLUTE_PATH = /(?<!\w)[A-Za-z]:[\\/](?![\\/])[^\s'"(),]+|(?<![\w:/.])\/[^\s'"(),]+/g;
+const FILE_NAME = /\.\w+(?::\d+)*$/;
+const PLATFORM_SUFFIX = /-(linux|darwin|win32)\.png$/i;
+
+/**
+ * The operating system a report was made on, from the errors of its
+ * screenshot failures: snapshot files named "-linux.png" and the like, or
+ * else the shape of absolute paths (C:\ for Windows, /Users/ for macOS, other
+ * / paths for Linux). Null when there is no clue or the clues disagree.
+ */
+export function reportPlatform(failures: Failure[]): Platform | null {
+  const named = new Set<Platform>();
+  const shaped = new Set<Platform>();
+  for (const failure of failures) {
+    if (failure.shots.length === 0) continue;
+    for (const p of failure.error.match(ABSOLUTE_PATH) ?? []) {
+      if (!FILE_NAME.test(p)) continue;
+      const suffix = PLATFORM_SUFFIX.exec(p)?.[1];
+      if (suffix) named.add(suffix.toLowerCase() as Platform);
+      shaped.add(/^[A-Za-z]:/.test(p) ? 'win32' : p.startsWith('/Users/') ? 'darwin' : 'linux');
+    }
+  }
+  const single = (set: Set<Platform>) => (set.size === 1 ? ([...set][0] ?? null) : null);
+  return named.size > 0 ? single(named) : single(shaped);
 }
 
 /** Project order of the config, then file and position. */
