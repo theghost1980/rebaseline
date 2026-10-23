@@ -45,6 +45,10 @@ describe.each(saved)('saved report %s', async (name) => {
     custom: (base: string) => `tests/__screenshots__/custom/visual.spec.ts/${base}.png`,
   };
 
+  it('knows the system the tests ran on', () => {
+    expect(report.platform).toBe(meta.platform);
+  });
+
   it('lists the failed tests with their screenshots', () => {
     for (const project of ['default', 'custom']) {
       expect(failure(project, 'changed screenshot')?.shots.map((s) => s.name)).toEqual(['hero']);
