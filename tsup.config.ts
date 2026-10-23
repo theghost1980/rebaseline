@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { defineConfig, type Options } from 'tsup';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
@@ -39,6 +40,44 @@ const uiPage: EsbuildPlugin = {
   },
 };
 
+/** Licenses that may be bundled into the CLI. */
+const ALLOWED_LICENSES = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD']);
+
+/**
+ * Writes THIRD_PARTY_LICENSES.txt next to the output with the license of every
+ * package bundled into it, and fails the build if one is not allowed.
+ */
+const thirdPartyLicenses: EsbuildPlugin = {
+  name: 'third-party-licenses',
+  setup(build) {
+    build.initialOptions.metafile = true;
+    build.onEnd((result) => {
+      if (!result.metafile || result.errors.length > 0) return;
+      // The package folder of each bundled file: the part up to the last node_modules/<name> or node_modules/@scope/<name>.
+      const roots = new Set<string>();
+      for (const input of Object.keys(result.metafile.inputs)) {
+        const root = /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(input.replace(/\\/g, '/'))?.[1];
+        if (root) roots.add(root);
+      }
+      const sections = [...roots].sort().map((root) => {
+        const meta = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { name: string; version: string; license?: string };
+        if (!meta.license || !ALLOWED_LICENSES.has(meta.license)) {
+          throw new Error(`${meta.name} cannot be bundled: its license (${meta.license ?? 'none'}) is not in the allowed list`);
+        }
+        const file = readdirSync(root).find((name) => /^licen[cs]e/i.test(name));
+        const text = file ? readFileSync(path.join(root, file), 'utf8').trim() : `License: ${meta.license}`;
+        return `${meta.name}@${meta.version} (${meta.license})\n\n${text}`;
+      });
+      const outDir = build.initialOptions.outdir ?? 'dist';
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(
+        path.join(outDir, 'THIRD_PARTY_LICENSES.txt'),
+        `The rebaseline CLI includes the following packages. Their licenses follow.\n\n${sections.join(`\n\n${'-'.repeat(72)}\n\n`)}\n`,
+      );
+    });
+  },
+};
+
 export default defineConfig({
   entry: { cli: 'src/cli.ts' },
   format: ['esm'],
@@ -49,9 +88,11 @@ export default defineConfig({
   splitting: false,
   sourcemap: false,
   dts: false,
+  // Every dependency goes into dist/cli.js, so npx downloads one small package.
+  noExternal: [/.*/],
   banner: { js: '#!/usr/bin/env node' },
   define: {
     __VERSION__: JSON.stringify(pkg.version),
   },
-  esbuildPlugins: [uiPage],
+  esbuildPlugins: [uiPage, thirdPartyLicenses],
 });
