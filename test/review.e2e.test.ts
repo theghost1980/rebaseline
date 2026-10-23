@@ -1,10 +1,10 @@
-import { cpSync, existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runGit } from '../src/core/git.js';
 import type { StateView } from '../src/review/view.js';
 import { connect, makeRepo, runCli } from './e2e-helpers.js';
-import { fixtureDir, installFakePlaywright, isolateGit, tempDir, writeReport } from './helpers.js';
+import { fixtureDir, installFakePlaywright, isolateGit, lfsPointer, tempDir, writeReport } from './helpers.js';
 
 describe('rebaseline review', () => {
   isolateGit();
@@ -44,6 +44,33 @@ describe('rebaseline review', () => {
       ' M fixtures/pw-project/tests/visual.spec.ts-snapshots/hero-default-win32.png',
       '?? fixtures/pw-project/tests/__screenshots__/custom/visual.spec.ts/brand-new.png',
     ]);
+  });
+
+  it('replaces a Git LFS pointer with the accepted image, and puts the pointer back on reject', async () => {
+    const { root, project } = await makeRepo();
+    // The repository keeps this baseline in Git LFS and the image was never downloaded.
+    const rel = 'tests/visual.spec.ts-snapshots/hero-default-win32.png';
+    const file = path.join(project, rel);
+    const pointer = lfsPointer(readFileSync(file));
+    writeFileSync(file, pointer);
+    await runGit(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-am', 'lfs'], root);
+    const reportDir = path.join(tempDir(), 'report');
+    cpSync(path.join(fixtureDir, 'report'), reportDir, { recursive: true });
+
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], project);
+    const page = await connect(cli);
+    const shot = page.state.shots.find((s) => s.project === 'default' && s.title === 'changed screenshot');
+    expect(shot).toMatchObject({ via: 'lfs', target: `fixtures/pw-project/${rel}` });
+
+    expect((await page.accept(shot?.id ?? '')).status).toBe(200);
+    expect(readFileSync(file).subarray(1, 4).toString()).toBe('PNG');
+    expect((await page.reject(shot?.id ?? '')).status).toBe(200);
+    expect(readFileSync(file, 'utf8')).toBe(pointer);
+    expect((await page.accept(shot?.id ?? '')).status).toBe(200);
+    await page.done();
+
+    expect(await cli.exit).toBe(0);
+    expect(cli.output().stdout).toContain(` M fixtures/pw-project/${rel}`);
   });
 
   it('says there is nothing to review when every test passed', async () => {

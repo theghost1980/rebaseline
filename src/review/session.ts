@@ -27,6 +27,8 @@ export interface AcceptedFile {
   target: string;
   kind: 'changed' | 'new';
   untracked: boolean;
+  /** The file was a Git LFS pointer; it now holds the image. */
+  lfs: boolean;
   created: boolean;
 }
 
@@ -140,7 +142,15 @@ export class ReviewSession {
     return {
       accepted: entries.flatMap((e) =>
         e.decision === 'accepted' && e.write && e.resolution.status === 'resolved'
-          ? [{ target: e.write.target, kind: e.resolution.kind, untracked: e.resolution.via === 'untracked', created: e.write.created }]
+          ? [
+              {
+                target: e.write.target,
+                kind: e.resolution.kind,
+                untracked: e.resolution.via === 'untracked',
+                lfs: e.resolution.via === 'lfs',
+                created: e.write.created,
+              },
+            ]
           : [],
       ),
       rejected: entries.filter((e) => e.decision === 'rejected').length,

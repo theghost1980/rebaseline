@@ -289,6 +289,7 @@ function renderShot(s: StateView, shot: ShotView): HTMLElement[] {
       h('span', { class: 'badge' }, shot.name),
       shot.kind === 'new' && h('span', { class: 'badge new' }, 'new screenshot'),
       shot.via === 'untracked' && h('span', { class: 'badge untracked' }, 'baseline not tracked by git'),
+      shot.via === 'lfs' && h('span', { class: 'badge untracked' }, 'Git LFS pointer'),
     ),
     shot.target ? h('p', {}, shot.kind === 'new' ? 'Accepting creates ' : 'Accepting replaces ', h('code', {}, shot.target)) : null,
     shot.unresolved
@@ -300,6 +301,13 @@ function renderShot(s: StateView, shot: ShotView): HTMLElement[] {
         )
       : null,
     shot.via === 'untracked' ? h('div', { class: 'note' }, 'The baseline file exists but git does not track it yet. Remember to commit it.') : null,
+    shot.via === 'lfs'
+      ? h(
+          'div',
+          { class: 'note' },
+          'The baseline is stored with Git LFS and only its pointer is in this folder. Accepting writes the image there; commit it with git-lfs installed so it stays in LFS.',
+        )
+      : null,
     sameTarget.length > 0 ? h('div', { class: 'note' }, `Other screenshots in this report write the same file: ${sameTarget.join(', ')}. Only one of them can be accepted.`) : null,
     shot.stoppedAtScreenshot
       ? h('div', { class: 'note' }, 'The test stopped at this screenshot, so later screenshots in it were not compared. Run the tests again after accepting.')
