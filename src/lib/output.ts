@@ -1,5 +1,6 @@
 import { confirm, isCancel } from '@clack/prompts';
 import { createColors } from 'picocolors';
+import { formatDuration } from './format.js';
 
 /*
  * Terminal output.
@@ -81,14 +82,16 @@ export async function askYesNo(question: string): Promise<boolean> {
 }
 
 /**
- * Shows a spinner while `task` runs, in interactive terminals only. It only
- * writes: a spinner that also reads the keyboard puts the terminal in raw mode,
- * and on Windows that turns Ctrl+C into a plain key press.
+ * Shows a spinner with the elapsed time while `task` runs, in interactive
+ * terminals only. It only writes: a spinner that also reads the keyboard puts
+ * the terminal in raw mode, and on Windows that turns Ctrl+C into a plain key press.
  */
 export async function withSpinner<T>(message: string, task: () => Promise<T>): Promise<T> {
   if (!interactive) return task();
   let frame = 0;
-  const draw = () => process.stdout.write(`\r${color.cyan(sym.spinner[frame++ % sym.spinner.length] ?? '')} ${message}`);
+  const start = Date.now();
+  const draw = () =>
+    process.stdout.write(`\r${color.cyan(sym.spinner[frame++ % sym.spinner.length] ?? '')} ${message} ${color.dim(formatDuration(Date.now() - start))}`);
   draw();
   const timer = setInterval(draw, 100);
   try {
