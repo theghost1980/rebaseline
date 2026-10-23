@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isInside, realPathOf, toPosix } from '../lib/paths.js';
 import { listTrackedPngs, listUntrackedPngs, repoRoot } from './git.js';
+import { lfsPointerOid } from './lfs.js';
 import type { Failure, Platform, Report, Resolution, ResolvedVia, Shot, ShotKind, UnresolvedReason } from './types.js';
 
 export interface Baselines {
@@ -10,8 +11,17 @@ export interface Baselines {
   root: string;
   /** SHA-1 of the content -> paths relative to the root, with forward slashes. */
   index: Map<string, string[]>;
+  /** SHA-256 of the real image -> tracked Git LFS pointers to it; used when no tracked file matches. */
+  lfsIndex?: Map<string, string[]>;
   /** Same for PNG files git does not track and does not ignore; used only when nothing tracked matches. */
   untrackedIndex?: Map<string, string[]>;
+}
+
+export interface FileIndex {
+  /** SHA-1 of the content -> paths. */
+  bySha1: Map<string, string[]>;
+  /** For Git LFS pointers: SHA-256 of the real file -> paths. */
+  byLfsOid: Map<string, string[]>;
 }
 
 export interface LoadOptions {
@@ -28,16 +38,29 @@ export async function loadBaselines(cwd: string, options: LoadOptions = {}): Pro
     return !excluded.some((dir) => isInside(dir, abs));
   };
   const [tracked, untracked] = await Promise.all([listTrackedPngs(cwd), listUntrackedPngs(cwd)]);
+  const trackedIndex = await indexFiles(root, tracked.filter(keep));
   return {
     root,
-    index: await hashFiles(root, tracked.filter(keep)),
+    index: trackedIndex.bySha1,
+    lfsIndex: trackedIndex.byLfsOid,
     untrackedIndex: await hashFiles(root, untracked.filter(keep)),
   };
 }
 
 /** SHA-1 of each file (paths relative to root). Missing files are skipped. */
 export async function hashFiles(root: string, files: string[], concurrency = 16): Promise<Map<string, string[]>> {
-  const index = new Map<string, string[]>();
+  return (await indexFiles(root, files, concurrency)).bySha1;
+}
+
+/** SHA-1 of each file, plus the image SHA-256 of the files that are Git LFS pointers. Missing files are skipped. */
+export async function indexFiles(root: string, files: string[], concurrency = 16): Promise<FileIndex> {
+  const bySha1 = new Map<string, string[]>();
+  const byLfsOid = new Map<string, string[]>();
+  const add = (index: Map<string, string[]>, key: string, file: string) => {
+    const list = index.get(key);
+    if (list) list.push(file);
+    else index.set(key, [file]);
+  };
   let next = 0;
   const worker = async () => {
     while (next < files.length) {
@@ -48,15 +71,14 @@ export async function hashFiles(root: string, files: string[], concurrency = 16)
       } catch {
         continue;
       }
-      const sha1 = createHash('sha1').update(data).digest('hex');
-      const list = index.get(sha1);
-      if (list) list.push(file);
-      else index.set(sha1, [file]);
+      add(bySha1, createHash('sha1').update(data).digest('hex'), file);
+      const oid = lfsPointerOid(data);
+      if (oid) add(byLfsOid, oid, file);
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
-  for (const list of index.values()) list.sort();
-  return index;
+  for (const list of [...bySha1.values(), ...byLfsOid.values()]) list.sort();
+  return { bySha1, byLfsOid };
 }
 
 /** Resolution of every shot in the report, by shot id. */
@@ -84,8 +106,14 @@ export function resolveShot(failure: Pick<Failure, 'projectName'>, shot: Shot, b
   }
 
   if (!shot.expected?.sha1) return unresolved(kind, 'no-expected-image');
+  // Tracked files with the image, and Git LFS pointers to it, compete together:
+  // a repository can have some images downloaded and others not.
   const tracked = baselines.index.get(shot.expected.sha1) ?? [];
-  if (tracked.length > 0) return choose(tracked, 'tracked', failure, shot, platform);
+  const lfs = shot.expected.sha256 ? (baselines.lfsIndex?.get(shot.expected.sha256) ?? []) : [];
+  if (tracked.length + lfs.length > 0) {
+    const result = choose([...new Set([...tracked, ...lfs])].sort(), 'tracked', failure, shot, platform);
+    return result.status === 'resolved' && lfs.includes(result.target) ? { ...result, via: 'lfs' } : result;
+  }
   const untracked = baselines.untrackedIndex?.get(shot.expected.sha1) ?? [];
   if (untracked.length > 0) return choose(untracked, 'untracked', failure, shot, platform);
   return unresolved(kind, 'no-match');

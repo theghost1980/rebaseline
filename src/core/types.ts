@@ -4,6 +4,8 @@ export interface ReportImage {
   file: string;
   /** SHA-1 of the file content, or null when the file is missing. */
   sha1: string | null;
+  /** SHA-256 of the file content, to match Git LFS pointers; null when the file is missing. */
+  sha256?: string | null;
 }
 
 /** A failed screenshot comparison. */
@@ -75,10 +77,11 @@ export type UnresolvedReason =
   | 'invalid-path';
 
 /**
- * How a target was found: a tracked file, a file git does not track yet, or
- * the path reported for a new screenshot.
+ * How a target was found: a tracked file, a tracked Git LFS pointer whose
+ * image is not downloaded, a file git does not track yet, or the path
+ * reported for a new screenshot.
  */
-export type ResolvedVia = 'tracked' | 'untracked' | 'path';
+export type ResolvedVia = 'tracked' | 'lfs' | 'untracked' | 'path';
 
 /** Where an accepted screenshot would be written. */
 export type Resolution =

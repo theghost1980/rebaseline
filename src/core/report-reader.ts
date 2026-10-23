@@ -250,9 +250,10 @@ async function loadImage(reportDir: string, rel: string | null | undefined): Pro
   // Paths come from the report JSON; never read outside the report folder.
   if (!isInside(reportDir, file)) return null;
   try {
-    return { file, sha1: createHash('sha1').update(await readFile(file)).digest('hex') };
+    const data = await readFile(file);
+    return { file, sha1: createHash('sha1').update(data).digest('hex'), sha256: createHash('sha256').update(data).digest('hex') };
   } catch {
-    return { file, sha1: null };
+    return { file, sha1: null, sha256: null };
   }
 }
 

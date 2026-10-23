@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'n
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { WriterError, checkTarget, deleteNewBaseline, restoreBaseline, writeBaseline } from '../src/core/writer.js';
-import { png, sha1, tempDir, writeFiles } from './helpers.js';
+import { lfsPointer, png, sha1, tempDir, writeFiles } from './helpers.js';
 
 function setup() {
   const base = tempDir();
@@ -131,6 +131,15 @@ describe('restoreBaseline', () => {
     const { previous } = await writeBaseline(root, 'shots/hero.png', source);
     await restoreBaseline(root, 'shots/hero.png', previous as Buffer);
     expect(readFileSync(path.join(root, 'shots', 'hero.png'))).toEqual(png('old look'));
+  });
+
+  it('puts back a Git LFS pointer', async () => {
+    const { root, source } = setup();
+    writeFiles(root, { 'shots/hero.png': lfsPointer(png('old look')) });
+    const { previous } = await writeBaseline(root, 'shots/hero.png', source);
+    expect(readFileSync(path.join(root, 'shots', 'hero.png'))).toEqual(png('new look'));
+    await restoreBaseline(root, 'shots/hero.png', previous as Buffer);
+    expect(readFileSync(path.join(root, 'shots', 'hero.png'), 'utf8')).toBe(lfsPointer(png('old look')));
   });
 
   it('applies the same checks as writing', async () => {
