@@ -5,6 +5,7 @@ import { UserError } from '../lib/errors.js';
 import { plural } from '../lib/format.js';
 import { openBrowser } from '../lib/open-browser.js';
 import { askYesNo, bullet, canAsk, color, log, withSpinner } from '../lib/output.js';
+import { onStopSignal } from '../lib/signals.js';
 import { startServer } from '../server/server.js';
 import { offerCleanup } from './cleanup.js';
 import { ReviewSession, unsavedSnapshots } from './session.js';
@@ -35,8 +36,12 @@ export async function reviewReport(report: Report, options: ReviewReportOptions)
     return;
   }
   if (shots === 0) {
-    log.warn(`${plural(others.length, 'test')} failed in ${options.source}, none of them on a screenshot.`);
-    for (const f of others.slice(0, 10)) log.plain(`  ${bullet} [${f.projectName}] ${f.titlePath.join(' > ')} (${f.file}:${f.line})`);
+    log.warn(`${plural(others.length, 'test')} failed in ${options.source}, ${others.length === 1 ? 'not' : 'none of them'} on a screenshot.`);
+    for (const f of others.slice(0, 10)) {
+      // Configs without projects report an empty project name.
+      const project = f.projectName ? `[${f.projectName}] ` : '';
+      log.plain(`  ${bullet} ${project}${f.titlePath.join(' > ')} (${f.file}:${f.line})`);
+    }
     if (others.length > 10) log.plain(`  ${bullet} ...and ${others.length - 10} more`);
     warnUnsaved(unsaved);
     return;
@@ -88,15 +93,12 @@ export function parsePort(value: number | string | undefined): number {
   return port;
 }
 
-/** Resolves on the first Ctrl+C; a second one ends the process as usual. */
+/** Resolves on the first Ctrl+C (or kill, or closed terminal); a second one ends the process as usual. */
 function interrupted(): Promise<void> {
   return new Promise((resolve) => {
-    const onSignal = () => {
-      process.removeListener('SIGINT', onSignal);
-      process.removeListener('SIGTERM', onSignal);
+    const stop = onStopSignal(() => {
+      stop();
       resolve();
-    };
-    process.on('SIGINT', onSignal);
-    process.on('SIGTERM', onSignal);
+    });
   });
 }
