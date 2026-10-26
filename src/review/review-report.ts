@@ -1,13 +1,16 @@
 import html from 'virtual:ui-html';
+import { NotInRepositoryError } from '../core/git.js';
 import { loadBaselines, resolveReport } from '../core/resolver.js';
 import type { Report } from '../core/types.js';
 import { UserError } from '../lib/errors.js';
 import { plural } from '../lib/format.js';
 import { openBrowser } from '../lib/open-browser.js';
 import { askYesNo, bullet, canAsk, color, log, withSpinner } from '../lib/output.js';
+import { displayPath } from '../lib/paths.js';
 import { onStopSignal } from '../lib/signals.js';
 import { startServer } from '../server/server.js';
 import { offerCleanup } from './cleanup.js';
+import { cdCommand, reportProject, suggestFolder } from './folder-hint.js';
 import { ReviewSession, unsavedSnapshots } from './session.js';
 import { printSummary } from './summary.js';
 
@@ -20,6 +23,8 @@ export interface ReviewReportOptions {
   open: boolean;
   /** Folders that never hold baselines, such as the report folder. */
   exclude: string[];
+  /** The local report folder; reports downloaded by pull have none. */
+  reportDir?: string;
 }
 
 /**
@@ -47,9 +52,24 @@ export async function reviewReport(report: Report, options: ReviewReportOptions)
     return;
   }
 
-  const baselines = await withSpinner('Reading baselines', () => loadBaselines(options.cwd, { exclude: options.exclude }));
+  const baselines = await withSpinner('Reading baselines', () => loadBaselines(options.cwd, { exclude: options.exclude })).catch(async (err: unknown) => {
+    // Outside any repository, a local report still says which project it belongs to.
+    if (err instanceof NotInRepositoryError && options.reportDir) {
+      const project = await reportProject(options.reportDir);
+      if (project) throw new UserError(err.message, `Run rebaseline from the project folder: ${cdCommand(project, options.cwd)}`);
+    }
+    throw err;
+  });
   const resolutions = resolveReport(report, baselines);
   const unresolved = [...resolutions.values()].filter((r) => r.status === 'unresolved').length;
+  const hint = unresolved > 0 ? await suggestFolder(report, resolutions, baselines, options) : null;
+  if (hint?.reason === 'other-repo') {
+    // Accepting here could only write new screenshots into the wrong repository.
+    throw new UserError(
+      `The report comes from another repository: ${displayPath(hint.folder)}`,
+      `Run rebaseline from there: ${cdCommand(hint.folder, options.cwd)}`,
+    );
+  }
   const session = new ReviewSession(report, resolutions, baselines.root);
   const server = await startServer(session, { html, port: options.port });
 
@@ -59,6 +79,12 @@ export async function reviewReport(report: Report, options: ReviewReportOptions)
       '.',
   );
   if (unresolved > 0) log.warn(`${plural(unresolved, 'screenshot')} cannot be accepted; the page explains why.`);
+  if (hint?.reason === 'outside-folder') {
+    log.warn(
+      `The baselines of the changed screenshots are outside this folder, in ${displayPath(hint.folder)}.`,
+      `Only baselines under the current folder are used. Run rebaseline from there: ${cdCommand(hint.folder, options.cwd)}`,
+    );
+  }
   warnUnsaved(unsaved);
   log.plain(`  Review page: ${server.url}`);
   log.plain(`  ${color.dim('Click Done on the page, or press Ctrl+C here, when you are finished.')}`);

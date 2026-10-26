@@ -38,6 +38,7 @@ export async function review(options: ReviewOptions): Promise<void> {
     port,
     open: options.open !== false,
     exclude: [reportDir],
+    reportDir,
   });
 }
 

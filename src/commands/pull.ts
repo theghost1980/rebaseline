@@ -71,11 +71,12 @@ export async function pull(options: PullOptions): Promise<void> {
   } else if (prRef) {
     const pr = await viewPullRequest(repo, prRef.number, cwd);
     const runs = await listRuns(repo, { commit: pr.headRefOid }, cwd);
-    choice = await chooseNewestRun(repo, runs, `pull request #${pr.number}`, artifactName, cwd);
+    // The repository is named because it comes from the current folder, which may not be the intended one.
+    choice = await chooseNewestRun(repo, runs, `pull request #${pr.number} of ${repoName(repo)}`, artifactName, cwd);
   } else {
     const branch = await currentBranch(cwd);
     const runs = await listRuns(repo, { branch }, cwd);
-    choice = await chooseNewestRun(repo, runs, `branch ${branch}`, artifactName, cwd);
+    choice = await chooseNewestRun(repo, runs, `branch ${branch} of ${repoName(repo)}`, artifactName, cwd);
   }
 
   const { run } = choice;

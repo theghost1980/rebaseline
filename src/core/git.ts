@@ -6,6 +6,9 @@ import { displayPath } from '../lib/paths.js';
 /** Folders that hold test output, never baselines. */
 const OUTPUT_DIRS = new Set(['test-results', 'playwright-report']);
 
+/** git was run in a folder that is not inside a repository. */
+export class NotInRepositoryError extends UserError {}
+
 export function runGit(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -22,7 +25,7 @@ function gitError(err: { code?: string | number | null; message: string }, stder
     return new UserError('git was not found', 'Install git and make sure the git command works in this terminal.');
   }
   if (/not a git repository/i.test(stderr)) {
-    return new UserError(`${displayPath(cwd)} is not inside a git repository`, 'Run rebaseline from your project folder.');
+    return new NotInRepositoryError(`${displayPath(cwd)} is not inside a git repository`, 'Run rebaseline from your project folder.');
   }
   if (/dubious ownership/i.test(stderr)) {
     return new UserError(
