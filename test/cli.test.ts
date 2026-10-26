@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { checkNodeVersion } from '../src/lib/node-version.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
@@ -26,5 +27,18 @@ describe('built cli', () => {
     const res = run(['--wat']);
     expect(res.status).toBe(1);
     expect(res.stderr).not.toContain('    at ');
+  });
+
+  it('shows the options in the usage line of each command', () => {
+    expect(run(['pull', '--help']).stdout).toContain('$ rebaseline pull [options]');
+    expect(run(['review', '--help']).stdout).toContain('$ rebaseline review [options]');
+  });
+});
+
+describe('checkNodeVersion', () => {
+  it('refuses Node.js versions older than 22', () => {
+    expect(() => checkNodeVersion('20.19.0')).toThrow('rebaseline needs Node.js 22 or newer, and this is Node.js 20.19.0');
+    expect(() => checkNodeVersion('22.0.0')).not.toThrow();
+    expect(() => checkNodeVersion('24.12.0')).not.toThrow();
   });
 });

@@ -37,6 +37,13 @@ describe('rebaseline review', () => {
     expect(stdout).toContain(' M fixtures/pw-project/tests/visual.spec.ts-snapshots/hero-default-win32.png');
     expect(stdout).toContain(' M fixtures/pw-project/tests/__screenshots__/custom/visual.spec.ts/hero.png');
     expect(stdout).toContain('?? fixtures/pw-project/tests/__screenshots__/custom/visual.spec.ts/brand-new.png');
+    // Relative to the folder rebaseline ran in, ready to copy.
+    const add = stdout.split('\n').find((line) => line.trim().startsWith('git add -- '))?.trim().split(' ').slice(3).sort();
+    expect(add).toEqual([
+      'tests/__screenshots__/custom/visual.spec.ts/brand-new.png',
+      'tests/__screenshots__/custom/visual.spec.ts/hero.png',
+      'tests/visual.spec.ts-snapshots/hero-default-win32.png',
+    ]);
 
     const status = await runGit(['status', '--porcelain', '--untracked-files=all'], root);
     expect(status.trimEnd().split('\n').sort()).toEqual([

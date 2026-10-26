@@ -188,13 +188,18 @@ export interface RunWithReport {
  */
 export async function newestRunWithReport(repo: RepoRef, runs: Run[], name: string | undefined, cwd: string): Promise<RunWithReport | null> {
   let named: RunWithReport | null = null;
-  for (const run of runs.filter(isFinished).slice(0, SEARCH_LIMIT)) {
+  for (const run of searchedRuns(runs)) {
     const artifacts = await listArtifacts(repo, run.databaseId, cwd);
     const report = selectReportArtifacts(artifacts, name);
     if (report.kind !== 'none') return { run, artifacts, report };
     if (!named && name === undefined && artifacts.some((a) => REPORT_LIKE.test(a.name))) named = { run, artifacts, report };
   }
   return named;
+}
+
+/** The runs newestRunWithReport() looks at: the newest finished ones. */
+export function searchedRuns(runs: Run[]): Run[] {
+  return runs.filter(isFinished).slice(0, SEARCH_LIMIT);
 }
 
 export function isFinished(run: Run): boolean {

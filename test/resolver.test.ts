@@ -305,6 +305,46 @@ describe('resolveShot', () => {
     const fresh = shot({ missingPath: '/home/alice/other-project/new.png' });
     expect(resolveShot({ projectName: 'chromium' }, fresh, baselines({}))).toMatchObject({ kind: 'new', reason: 'outside-repo' });
   });
+
+  describe('new screenshots from a workflow that checks out into a subfolder', () => {
+    // actions/checkout with path: web puts the repository at <workspace>/web.
+    const runner = '/home/runner/work/app/app/web';
+    const newShot = (dir: string, file: string) => {
+      const missingPath = `${dir}/tests/a.spec.ts-snapshots/${file}`;
+      return {
+        failure: { projectName: 'chromium', file: 'a.spec.ts', error: `Error: A snapshot doesn't exist at ${missingPath}.\n\n    at ${dir}/tests/a.spec.ts:12:5` },
+        shot: shot({ missingPath }),
+      };
+    };
+    const repoWith = (files: string[]): Baselines => {
+      const repo = tempDir();
+      writeFiles(repo, Object.fromEntries(files.map((f) => [f, ''])));
+      return { root: repo, index: new Map() };
+    };
+
+    it('leaves out the checkout folder, found from where the test file is', () => {
+      const { failure, shot: fresh } = newShot(runner, 'fresh-linux.png');
+      expect(resolveShot(failure, fresh, repoWith(['tests/a.spec.ts']))).toMatchObject({ kind: 'new', target: 'tests/a.spec.ts-snapshots/fresh-linux.png' });
+    });
+
+    it('does the same with Windows runner paths', () => {
+      const { failure, shot: fresh } = newShot('D:\\a\\app\\app\\web', 'fresh-win32.png');
+      const windows = { ...failure, error: failure.error.replaceAll('/', '\\') };
+      const target = resolveShot(windows, { ...fresh, missingPath: (fresh.missingPath ?? '').replaceAll('/', '\\') }, repoWith(['tests/a.spec.ts']));
+      expect(target).toMatchObject({ target: 'tests/a.spec.ts-snapshots/fresh-win32.png' });
+    });
+
+    it('keeps a folder of that name when the test file is in it', () => {
+      const { failure, shot: fresh } = newShot(runner, 'fresh-linux.png');
+      expect(resolveShot(failure, fresh, repoWith(['web/tests/a.spec.ts']))).toMatchObject({ target: 'web/tests/a.spec.ts-snapshots/fresh-linux.png' });
+    });
+
+    it('keeps the reported path when the test file is not found', () => {
+      const { failure, shot: fresh } = newShot(runner, 'fresh-linux.png');
+      expect(resolveShot(failure, fresh, repoWith(['other.spec.ts']))).toMatchObject({ target: 'web/tests/a.spec.ts-snapshots/fresh-linux.png' });
+      expect(resolveShot({ projectName: 'chromium' }, fresh, repoWith(['tests/a.spec.ts']))).toMatchObject({ target: 'web/tests/a.spec.ts-snapshots/fresh-linux.png' });
+    });
+  });
 });
 
 describe('helpers', () => {

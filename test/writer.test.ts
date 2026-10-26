@@ -185,4 +185,18 @@ describe('checkTarget', () => {
     const { root } = setup();
     await expect(checkTarget(root, 'a\\b\\c.png')).resolves.toEqual({ file: path.join(root, 'a', 'b', 'c.png'), rel: 'a/b/c.png' });
   });
+
+  it.each(['shots/hero:alt.png', 'shots./hero.png', 'shots /hero.png', 'shots/hero?.png', 'nul.png', 'shots/COM1.png', 'aux/hero.png'])(
+    'refuses %s on Windows, where the name would not mean the same file',
+    async (target) => {
+      const { root } = setup();
+      expect((await rejection(checkTarget(root, target, 'win32'))).code).toBe('invalid-path');
+    },
+  );
+
+  it('accepts on Linux and macOS the names that only Windows refuses', async () => {
+    const { root } = setup();
+    await expect(checkTarget(root, 'shots/hero:alt.png', 'linux')).resolves.toMatchObject({ rel: 'shots/hero:alt.png' });
+    await expect(checkTarget(root, 'shots/console.png', 'win32')).resolves.toMatchObject({ rel: 'shots/console.png' });
+  });
 });
