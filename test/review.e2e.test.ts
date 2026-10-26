@@ -1,10 +1,10 @@
-import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runGit } from '../src/core/git.js';
 import type { StateView } from '../src/review/view.js';
 import { connect, makeRepo, runCli } from './e2e-helpers.js';
-import { fixtureDir, installFakePlaywright, isolateGit, lfsPointer, tempDir, writeReport } from './helpers.js';
+import { fixtureDir, installFakePlaywright, isolateGit, lfsPointer, tempDir, writeFiles, writeReport } from './helpers.js';
 
 describe('rebaseline review', () => {
   isolateGit();
@@ -104,6 +104,67 @@ describe('rebaseline review', () => {
     expect(stdout).toContain(', none of them on a screenshot.');
     expect(stdout).toMatch(/ text check \(example\.spec\.ts:1\)/);
     expect(stdout).not.toContain('[]');
+  });
+
+  it('points to the project folder when the baselines are outside the current folder', async () => {
+    const { root, project } = await makeRepo();
+    writeFiles(project, { 'playwright.config.ts': 'export default {};' });
+    const elsewhere = path.join(root, 'docs');
+    mkdirSync(elsewhere);
+    const reportDir = path.join(tempDir(), 'report');
+    cpSync(path.join(fixtureDir, 'report'), reportDir, { recursive: true });
+
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], elsewhere);
+    const page = await connect(cli);
+    await page.done();
+
+    expect(await cli.exit).toBe(0);
+    const { stdout } = cli.output();
+    expect(stdout).toContain(`The baselines of the changed screenshots are outside this folder, in ${project}.`);
+    expect(stdout).toContain(`Run rebaseline from there: cd ${path.join('..', 'fixtures', 'pw-project')}`);
+  });
+
+  it('points to the project of a local report when the baselines are also copied elsewhere', async () => {
+    const { root, project } = await makeRepo();
+    cpSync(path.join(fixtureDir, 'baselines'), path.join(root, 'archive'), { recursive: true });
+    await runGit(['add', '.'], root);
+    await runGit(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', 'copy'], root);
+    const reportDir = path.join(project, 'playwright-report');
+    cpSync(path.join(fixtureDir, 'report'), reportDir, { recursive: true });
+    const elsewhere = path.join(root, 'docs');
+    mkdirSync(elsewhere);
+
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], elsewhere);
+    const page = await connect(cli);
+    await page.done();
+
+    expect(await cli.exit).toBe(0);
+    expect(cli.output().stdout).toContain(`Run rebaseline from there: cd ${path.join('..', 'fixtures', 'pw-project')}`);
+  });
+
+  it('stops when the report comes from another repository', async () => {
+    const { project } = await makeRepo();
+    const reportDir = path.join(project, 'playwright-report');
+    cpSync(path.join(fixtureDir, 'report'), reportDir, { recursive: true });
+    const other = tempDir();
+    await runGit(['init', '-q'], other);
+
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], other);
+    expect(await cli.exit).toBe(1);
+    const { stdout, stderr } = cli.output();
+    expect(stderr).toContain(`The report comes from another repository: ${project}\n  Run rebaseline from there: cd ${path.relative(other, project)}`);
+    expect(stdout).not.toContain('Review page');
+  });
+
+  it('suggests the project folder when the current folder is not in a repository', async () => {
+    const { project } = await makeRepo();
+    const reportDir = path.join(project, 'playwright-report');
+    cpSync(path.join(fixtureDir, 'report'), reportDir, { recursive: true });
+    const outside = tempDir();
+
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], outside);
+    expect(await cli.exit).toBe(1);
+    expect(cli.output().stderr).toContain(`is not inside a git repository\n  Run rebaseline from the project folder: cd ${path.relative(outside, project)}`);
   });
 
   it('explains a missing report in two lines', async () => {
