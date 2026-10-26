@@ -2,6 +2,7 @@ import { cac } from 'cac';
 import { type PullOptions, pull } from './commands/pull.js';
 import { type ReviewOptions, review } from './commands/review.js';
 import { errorMessage, isUserError } from './lib/errors.js';
+import { checkNodeVersion } from './lib/node-version.js';
 import { log } from './lib/output.js';
 
 const ISSUES_URL = 'https://github.com/theghost1980/rebaseline/issues';
@@ -21,6 +22,7 @@ cli
 
 cli
   .command('pull', 'Review failed screenshots from a GitHub Actions run (uses the GitHub CLI)')
+  .usage('pull [options]')
   .option('--run <id|url>', 'Workflow run to use (default: the newest run of the current branch with a report)')
   .option('--pr <number|url>', 'Use the newest run of a pull request')
   .option('--artifact <name>', 'Report artifact name, * matches any text (default: playwright-report)')
@@ -81,6 +83,7 @@ function handleError(err: unknown): void {
 
 async function main(): Promise<void> {
   try {
+    checkNodeVersion();
     cli.parse(process.argv, { run: false });
     await cli.runMatchedCommand();
   } catch (err) {

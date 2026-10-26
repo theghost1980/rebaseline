@@ -87,8 +87,10 @@ function commonFolder(files: string[]): string {
   return first.slice(0, depth).join('/');
 }
 
-/** "cd <folder>", relative to `cwd` and quoted when it has spaces. */
+/** "cd <folder>", relative to `cwd` unless that climbs more than two folders, and quoted when it has spaces. */
 export function cdCommand(folder: string, cwd: string): string {
   const rel = path.relative(cwd, folder) || '.';
-  return /\s/.test(rel) ? `cd "${rel}"` : `cd ${rel}`;
+  const climbs = rel.split(/[\\/]/).filter((s) => s === '..').length;
+  const shown = climbs > 2 || path.isAbsolute(rel) ? folder : rel;
+  return /\s/.test(shown) ? `cd "${shown}"` : `cd ${shown}`;
 }
