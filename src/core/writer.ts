@@ -78,7 +78,7 @@ export async function deleteNewBaseline(root: string, target: string, sha1: stri
 }
 
 /** Validates a repository-relative target and returns its absolute path. */
-export async function checkTarget(root: string, target: string): Promise<{ file: string; rel: string }> {
+export async function checkTarget(root: string, target: string, platform: NodeJS.Platform = process.platform): Promise<{ file: string; rel: string }> {
   const raw = toPosix(target.trim());
   if (raw === '' || raw.includes('\0') || path.posix.isAbsolute(raw) || path.win32.isAbsolute(target) || /^[A-Za-z]:/.test(raw)) {
     throw new WriterError('invalid-path', `Refusing to write "${target}": not a path inside the repository`);
@@ -89,6 +89,10 @@ export async function checkTarget(root: string, target: string): Promise<{ file:
   }
   if (segments.some((s) => s.toLowerCase() === '.git')) {
     throw new WriterError('invalid-path', `Refusing to write "${target}": it is inside the .git folder`);
+  }
+  // Windows writes "a:b.png" into a hidden stream of the file "a", and drops trailing dots and spaces.
+  if (platform === 'win32' && segments.some(invalidOnWindows)) {
+    throw new WriterError('invalid-path', `Refusing to write "${target}": the name is not valid on Windows`);
   }
   if (path.posix.extname(raw).toLowerCase() !== '.png') {
     throw new WriterError('not-png', `Refusing to write "${target}": only .png files can be written`);
@@ -121,6 +125,10 @@ export async function checkTarget(root: string, target: string): Promise<{ file:
   }
 
   return { file, rel: segments.join('/') };
+}
+
+function invalidOnWindows(segment: string): boolean {
+  return /[<>:"|?*\x00-\x1f]|[. ]$/.test(segment) || /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(segment);
 }
 
 async function readSource(source: string): Promise<Buffer> {
