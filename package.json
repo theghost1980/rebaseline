@@ -1,13 +1,26 @@
 {
   "name": "rebaseline",
-  "version": "0.0.1",
-  "description": "Work in progress.",
+  "version": "0.1.0-beta.0",
+  "description": "Review failed Playwright screenshots in your browser and accept them into their baseline files, also from GitHub Actions runs. No Docker.",
+  "keywords": [
+    "playwright",
+    "visual-regression",
+    "screenshot-testing",
+    "snapshot-testing",
+    "toHaveScreenshot",
+    "baseline",
+    "github-actions",
+    "e2e",
+    "testing",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "rebaseline": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=22"
@@ -28,7 +41,7 @@
   "bugs": {
     "url": "https://github.com/theghost1980/rebaseline/issues"
   },
-  "author": "theghost1980",
+  "author": "Saturno Mangieri (https://github.com/theghost1980)",
   "license": "MIT",
   "devDependencies": {
     "@clack/prompts": "^1.8.1",
