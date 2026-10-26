@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isInside, realPathOf, toPosix } from '../lib/paths.js';
@@ -94,15 +95,21 @@ export function resolveReport(report: Report, baselines: Baselines): Map<string,
  * Decides which repository file an accepted screenshot replaces or creates.
  * `platform` is the system the report was made on, used as the last tie-break.
  */
-export function resolveShot(failure: Pick<Failure, 'projectName'>, shot: Shot, baselines: Baselines, platform: Platform | null = null): Resolution {
+export function resolveShot(
+  failure: Pick<Failure, 'projectName'> & Partial<Pick<Failure, 'file' | 'error'>>,
+  shot: Shot,
+  baselines: Baselines,
+  platform: Platform | null = null,
+): Resolution {
   const kind: ShotKind = shot.missingPath !== null ? 'new' : 'changed';
   if (shot.actual.sha1 === null) return unresolved(kind, 'missing-image');
 
   if (shot.missingPath !== null) {
     const repoPath = toRepoPath(shot.missingPath, baselines.root);
-    return 'path' in repoPath
-      ? { status: 'resolved', kind, target: repoPath.path, via: 'path' }
-      : unresolved(kind, repoPath.reason);
+    if (!('path' in repoPath)) return unresolved(kind, repoPath.reason);
+    const prefix = stripRunnerPrefix(shot.missingPath) === null ? '' : checkoutPrefix(failure, baselines.root);
+    const target = prefix && repoPath.path.startsWith(prefix) ? repoPath.path.slice(prefix.length) : repoPath.path;
+    return { status: 'resolved', kind, target, via: 'path' };
   }
 
   if (!shot.expected?.sha1) return unresolved(kind, 'no-expected-image');
@@ -174,6 +181,42 @@ export function stripRunnerPrefix(raw: string): string | null {
     if (m?.[1] && m[2] && m[3] && m[1].toLowerCase() === m[2].toLowerCase()) return m[3];
   }
   return null;
+}
+
+/**
+ * The folder a workflow checked the repository out into, inside the runner
+ * workspace (actions/checkout with path: web gives "web/"), or "" when there is
+ * none or no clue. Every path the run reports starts with it.
+ *
+ * The clue is the test file: its runner path appears in the errors (in stack
+ * lines such as "at /home/runner/work/app/app/web/tests/a.spec.ts:12:5"). When
+ * that file is not where the runner had it but is found with leading folders
+ * removed, those folders are the checkout folder.
+ */
+export function checkoutPrefix(failure: Partial<Pick<Failure, 'file' | 'error'>>, root: string): string {
+  if (!failure.file || !failure.error) return '';
+  const file = failure.file.split('/').map(escapeRegExp).join('[\\\\/]');
+  for (const m of failure.error.matchAll(new RegExp(`([^\\s()'"]*[\\\\/]${file}):\\d+`, 'g'))) {
+    const rel = stripRunnerPrefix(m[1] ?? '');
+    if (rel === null) continue;
+    const segments = rel.split('/');
+    for (let k = 0; k < segments.length; k++) {
+      if (isFile(path.join(root, ...segments.slice(k)))) return k === 0 ? '' : `${segments.slice(0, k).join('/')}/`;
+    }
+  }
+  return '';
+}
+
+function isFile(p: string): boolean {
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** A reported absolute path as a path relative to the repository root. */
