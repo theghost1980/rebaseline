@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+  <img src=".github/assets/logo.svg" alt="" width="72" height="72">
+</picture>
+
 # rebaseline
 
 **Stop using Docker just to update Playwright snapshots from CI.**
@@ -5,6 +10,8 @@
 rebaseline shows the failed `toHaveScreenshot` results of a Playwright run in your browser (expected, actual and diff) and writes the screenshots you accept to their baseline files in your repository. It works with the report of your last GitHub Actions run, so you can update `-linux.png` baselines from a Mac or Windows machine.
 
 > **Beta.** Try it with `npx rebaseline@beta`. Feedback is very welcome, especially when something fails: open a [discussion](https://github.com/theghost1980/rebaseline/discussions) or an [issue](https://github.com/theghost1980/rebaseline/issues/new/choose).
+
+![The review page: the expected and actual screenshots of a pricing section side by side, with Accept and Reject buttons and the baseline file that accepting replaces](.github/assets/review-side-by-side.png)
 
 ## Why
 
@@ -29,7 +36,7 @@ npx playwright test
 npx rebaseline@beta review
 ```
 
-Accept or reject each screenshot on the page, then click **Done**. rebaseline prints a summary with `git status`. It never commits: check the changes with git and commit them as usual.
+Accept or reject each screenshot on the page, then click **Done**. rebaseline prints a summary with `git status` and a `git add` command for the files it wrote. It never commits: check the changes with git and commit them as usual.
 
 ## Requirements
 
@@ -97,6 +104,10 @@ The download goes to a temporary folder that is removed when the review ends.
 - Screenshots that cannot be accepted say why, for example when no baseline matches or when two baselines are equally likely.
 - Failures that are not screenshots are listed too, so you see the whole run.
 
+| Slider | Diff |
+| --- | --- |
+| ![The slider view: a handle in the middle shows the expected image on the left and the actual one on the right](.github/assets/review-slider.png) | ![The diff view: the changed pixels of the pricing section are highlighted in red](.github/assets/review-diff.png) |
+
 | Key | Action |
 | --- | --- |
 | `A` / `R` | Accept / reject |
@@ -109,7 +120,7 @@ The download goes to a temporary folder that is removed when the review ends.
 
 The expected image in a Playwright report is a byte-for-byte copy of the baseline in your repository. rebaseline hashes it and looks for the committed PNG file with the same content, so it works with any `snapshotPathTemplate` without reading your config. When several files match, it uses the project, the screenshot name and then the operating system of the report.
 
-- **New screenshots** go to the path in Playwright's "A snapshot doesn't exist at …" message, with the CI workspace folder removed.
+- **New screenshots** go to the path in Playwright's "A snapshot doesn't exist at …" message, with the CI workspace folder removed. If your workflow checks out into a subfolder (`actions/checkout` with `path:`), that folder is removed too.
 - **Git LFS:** baselines stored as LFS pointers are matched too. Accepting one writes the image, and git-lfs stores it on commit.
 
 Only baselines under the current folder are used. If the screenshots seem to belong to another folder or repository, rebaseline says which one and how to get there.
