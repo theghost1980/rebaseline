@@ -26,8 +26,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: The output of `npx rebaseline@beta --version`, and your Playwright and Node.js versions.
-      placeholder: rebaseline 0.1.0-beta.0, Playwright 1.64.1, Node.js 24.1.0
+      description: The output of `npx rebaseline@beta --version` (it includes your system and Node.js version), and your Playwright version.
+      placeholder: rebaseline/0.1.0-beta.0 darwin-arm64 node-v24.1.0, Playwright 1.64.1
     validations:
       required: true
   - type: dropdown
