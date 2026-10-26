@@ -28,14 +28,12 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: node dist/cli.js --version
-      # Check that the built CLI runs on the oldest Node it supports (engines in package.json).
+      # Install the packed package in an empty folder and review a report with it, as a user would.
+      - run: node scripts/smoke-package.mjs
+      # The same on the oldest Node it supports (engines in package.json).
       - if: matrix.os == 'ubuntu-latest'
         uses: actions/setup-node@v7
         with:
           node-version: '22.0.0'
       - if: matrix.os == 'ubuntu-latest'
-        run: |
-          node --version
-          node dist/cli.js --version
-          node dist/cli.js --help
+        run: node scripts/smoke-package.mjs
