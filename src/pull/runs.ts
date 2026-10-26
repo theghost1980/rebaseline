@@ -46,7 +46,7 @@ const RUN_LIMIT = 20;
 /** Finished runs checked for a report before giving up. */
 const SEARCH_LIMIT = 10;
 
-const DEFAULT_ARTIFACT = 'playwright-report';
+export const DEFAULT_ARTIFACT = 'playwright-report';
 
 /** Parses a run number or a run URL (https://github.com/owner/name/actions/runs/123...). */
 export function parseRunReference(value: string | number): Reference | null {
@@ -127,19 +127,17 @@ export type ReportArtifacts =
   | { kind: 'blob'; artifacts: Artifact[] }
   | { kind: 'none' };
 
+/** Names that suggest a report, such as "playwright-report", "e2e-report" or "blob-report-1". */
+const REPORT_LIKE = /report|playwright/i;
+const BLOB_LIKE = /blob/i;
+
 /**
  * The artifacts that hold the report. With a name (where * matches any text),
  * every artifact that matches; otherwise "playwright-report", or the
  * "playwright-report*" artifacts of a sharded run.
  */
 export function selectReportArtifacts(all: Artifact[], name?: string): ReportArtifacts {
-  // A re-run can upload an artifact with the same name again; keep the newest.
-  const newest = new Map<string, Artifact>();
-  for (const a of all) {
-    const seen = newest.get(a.name);
-    if (!seen || a.created_at > seen.created_at) newest.set(a.name, a);
-  }
-  const artifacts = [...newest.values()].sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
+  const artifacts = newestByName(all);
 
   if (name !== undefined) {
     const pattern = new RegExp(`^${name.split('*').map(escapeRegExp).join('.*')}$`, 'i');
@@ -150,9 +148,29 @@ export function selectReportArtifacts(all: Artifact[], name?: string): ReportArt
   if (exact.length > 0) return { kind: 'html', artifacts: exact };
   const shards = artifacts.filter((a) => a.name.startsWith(DEFAULT_ARTIFACT));
   if (shards.length > 0) return { kind: 'html', artifacts: shards };
-  const blobs = artifacts.filter((a) => a.name.startsWith('blob-report'));
-  if (blobs.length > 0) return { kind: 'blob', artifacts: blobs };
+  // Only when no other artifact looks like a report, which could be an HTML report with its own name.
+  const reports = artifacts.filter((a) => REPORT_LIKE.test(a.name));
+  if (reports.length > 0 && reports.every((a) => BLOB_LIKE.test(a.name))) return { kind: 'blob', artifacts: reports };
   return { kind: 'none' };
+}
+
+/**
+ * The artifacts in the order to look for the report in: names that look like
+ * reports, then blob reports, then the rest, largest first in each group.
+ */
+export function rankArtifacts(all: Artifact[]): Artifact[] {
+  const group = (a: Artifact) => (!REPORT_LIKE.test(a.name) ? 2 : BLOB_LIKE.test(a.name) ? 1 : 0);
+  return newestByName(all).sort((a, b) => group(a) - group(b) || b.size_in_bytes - a.size_in_bytes);
+}
+
+/** A re-run can upload an artifact with the same name again; keeps the newest, sorted by name. */
+function newestByName(all: Artifact[]): Artifact[] {
+  const newest = new Map<string, Artifact>();
+  for (const a of all) {
+    const seen = newest.get(a.name);
+    if (!seen || a.created_at > seen.created_at) newest.set(a.name, a);
+  }
+  return [...newest.values()].sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
 }
 
 export interface RunWithReport {
@@ -164,14 +182,19 @@ export interface RunWithReport {
 /**
  * The newest finished run (of `runs`, newest first) that uploaded a report.
  * Runs of other workflows, such as linting, have no report and are skipped.
+ * Without a name, a report with its own name is not found; then the newest run
+ * with artifacts that look like reports is returned (kind "none"), so the
+ * caller can name them.
  */
 export async function newestRunWithReport(repo: RepoRef, runs: Run[], name: string | undefined, cwd: string): Promise<RunWithReport | null> {
+  let named: RunWithReport | null = null;
   for (const run of runs.filter(isFinished).slice(0, SEARCH_LIMIT)) {
     const artifacts = await listArtifacts(repo, run.databaseId, cwd);
     const report = selectReportArtifacts(artifacts, name);
     if (report.kind !== 'none') return { run, artifacts, report };
+    if (!named && name === undefined && artifacts.some((a) => REPORT_LIKE.test(a.name))) named = { run, artifacts, report };
   }
-  return null;
+  return named;
 }
 
 export function isFinished(run: Run): boolean {

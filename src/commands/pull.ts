@@ -1,21 +1,23 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import { rm } from 'node:fs/promises';
 import { repoRoot } from '../core/git.js';
 import { mergeReports, readReport } from '../core/report-reader.js';
 import { UserError } from '../lib/errors.js';
 import { formatBytes, plural, timeAgo } from '../lib/format.js';
 import { color, log, withSpinner } from '../lib/output.js';
+import { onStopSignal } from '../lib/signals.js';
 import { downloadReports } from '../pull/download.js';
+import { makeDownloadDir, removeStaleDownloads } from '../pull/download-dir.js';
 import { currentBranch, findRepo, headCommit, type RepoRef, repoName, sameRepo } from '../pull/repo.js';
 import {
   type Artifact,
+  DEFAULT_ARTIFACT,
   isFinished,
   listArtifacts,
   listRuns,
   newestRunWithReport,
   parsePullRequestReference,
   parseRunReference,
+  rankArtifacts,
   type Reference,
   type ReportArtifacts,
   type Run,
@@ -45,6 +47,9 @@ interface Choice {
   /** A newer run of the same workflow that has not finished. */
   newer: Run | null;
 }
+
+/** Artifacts named in the message when the report is not found. */
+const LISTED_ARTIFACTS = 8;
 
 const CONCLUSIONS: Record<string, string> = { success: 'passed', failure: 'failed', timed_out: 'timed out', startup_failure: 'failed to start' };
 
@@ -94,7 +99,8 @@ export async function pull(options: PullOptions): Promise<void> {
   const size = formatBytes(artifacts.reduce((n, a) => n + a.size_in_bytes, 0));
   const label = artifacts.length === 1 ? (artifacts[0]?.name ?? '') : plural(artifacts.length, 'report artifact');
 
-  const tmp = await mkdtemp(path.join(os.tmpdir(), 'rebaseline-'));
+  await removeStaleDownloads();
+  const tmp = await makeDownloadDir();
   try {
     const dirs = await withSpinner(`Downloading ${label} (${size})`, () =>
       untilInterrupted((signal) => downloadReports(repo, run, artifacts, tmp, cwd, signal)),
@@ -169,12 +175,11 @@ function reportArtifacts(run: Run, all: Artifact[], report: ReportArtifacts, nam
     if (all.length === 0) {
       throw new UserError(`Run ${id} has no artifacts`, 'Upload the HTML report as an artifact in your workflow, for example:', UPLOAD_REPORT_YAML);
     }
-    const names = [...new Set(all.map((a) => a.name))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-    const shown = names.slice(0, 8).join(', ') + (names.length > 8 ? `, and ${names.length - 8} more` : '');
-    throw new UserError(
-      name === undefined ? `Run ${id} has no Playwright report artifact` : `Run ${id} has no artifact named ${name}`,
-      `Its artifacts: ${shown}. Choose the report with --artifact <name>.`,
-    );
+    // The likeliest report first: an HTML report is usually the largest artifact that looks like one.
+    const ranked = rankArtifacts(all);
+    const shown = ranked.slice(0, LISTED_ARTIFACTS).map((a) => `${a.name} (${formatBytes(a.size_in_bytes)})`);
+    const more = ranked.length > LISTED_ARTIFACTS ? `, and ${ranked.length - LISTED_ARTIFACTS} more` : '';
+    throw new UserError(`Run ${id} has no artifact named ${name ?? DEFAULT_ARTIFACT}`, `Its artifacts: ${shown.join(', ')}${more}. Choose the report with --artifact <name>.`);
   }
   if (report.artifacts.some((a) => a.expired)) {
     throw new UserError(`The report of run ${id} has expired`, `GitHub deletes artifacts after their retention period. Re-run the workflow to get a new one: ${run.url}`);
@@ -189,19 +194,16 @@ function describeRun(run: Run): void {
   log.plain(`  ${color.dim(run.url)}`);
 }
 
-/** Runs `task` and aborts it on Ctrl+C, so the temporary files can be removed before exiting. */
+/** Runs `task` and aborts it on Ctrl+C (or kill, or closed terminal), so the temporary files can be removed before exiting. */
 async function untilInterrupted<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
-  const onSignal = () => controller.abort();
-  process.on('SIGINT', onSignal);
-  process.on('SIGTERM', onSignal);
+  const stop = onStopSignal(() => controller.abort());
   try {
     return await task(controller.signal);
   } catch (err) {
     if (controller.signal.aborted) throw new UserError('Download interrupted', 'Nothing was changed. Run the command again to review the run.');
     throw err;
   } finally {
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
+    stop();
   }
 }

@@ -87,9 +87,23 @@ describe('rebaseline review', () => {
     const cli = runCli(['review', '--report', reportDir, '--no-open'], project);
     expect(await cli.exit).toBe(0);
     const { stdout } = cli.output();
-    expect(stdout).toContain('1 test failed');
-    expect(stdout).toContain('text check');
+    expect(stdout).toContain(', not on a screenshot.');
+    expect(stdout).toContain('[chromium] text check');
     expect(stdout).not.toContain('Review page');
+  });
+
+  it('leaves out the project of a config without projects', async () => {
+    const { project } = await makeRepo();
+    const reportDir = writeReport(tempDir(), [
+      { title: 'text check', projectName: '', results: [{ errors: ['Error: boom'] }] },
+      { title: 'other check', projectName: '', results: [{ errors: ['Error: boom'] }] },
+    ]);
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], project);
+    expect(await cli.exit).toBe(0);
+    const { stdout } = cli.output();
+    expect(stdout).toContain(', none of them on a screenshot.');
+    expect(stdout).toMatch(/ text check \(example\.spec\.ts:1\)/);
+    expect(stdout).not.toContain('[]');
   });
 
   it('explains a missing report in two lines', async () => {

@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runGit } from '../src/core/git.js';
@@ -6,7 +8,8 @@ import type { Failure, Report } from '../src/core/types.js';
 import { formatBytes, formatDuration, timeAgo } from '../src/lib/format.js';
 import { runGh } from '../src/pull/gh.js';
 import { currentBranch, findRepo, parseRemoteUrl, parseRepoName, repoName } from '../src/pull/repo.js';
-import { type Artifact, parsePullRequestReference, parseRunReference, selectReportArtifacts } from '../src/pull/runs.js';
+import { makeDownloadDir, removeStaleDownloads } from '../src/pull/download-dir.js';
+import { type Artifact, parsePullRequestReference, parseRunReference, rankArtifacts, selectReportArtifacts } from '../src/pull/runs.js';
 import { UserError } from '../src/lib/errors.js';
 import { isolateGit, tempDir, writeFiles } from './helpers.js';
 
@@ -78,6 +81,15 @@ describe('choosing the report artifacts', () => {
     expect(selectReportArtifacts([artifact('blob-report-1'), artifact('blob-report-2')]).kind).toBe('blob');
   });
 
+  it('recognizes blob reports with their own names', () => {
+    const result = selectReportArtifacts([artifact('storybook-static'), artifact('ui-blob-report-2'), artifact('ui-blob-report-1')]);
+    expect(result.kind === 'blob' && result.artifacts.map((a) => a.name)).toEqual(['ui-blob-report-1', 'ui-blob-report-2']);
+  });
+
+  it('does not take a run for blob reports only when another artifact looks like a report', () => {
+    expect(selectReportArtifacts([artifact('html-report--attempt-1'), artifact('blob-reports-merged')])).toEqual({ kind: 'none' });
+  });
+
   it('finds nothing in other artifacts', () => {
     expect(selectReportArtifacts([artifact('coverage')])).toEqual({ kind: 'none' });
     expect(selectReportArtifacts([])).toEqual({ kind: 'none' });
@@ -94,6 +106,51 @@ describe('choosing the report artifacts', () => {
     const old = artifact('playwright-report', { id: 1, created_at: '2026-10-20T10:00:00Z' });
     const fresh = artifact('playwright-report', { id: 2, created_at: '2026-10-21T10:00:00Z' });
     expect(selectReportArtifacts([fresh, old])).toEqual({ kind: 'html', artifacts: [fresh] });
+  });
+
+  it('ranks the artifacts that look like reports first, largest first', () => {
+    const ranked = rankArtifacts([
+      artifact('build-output', { size_in_bytes: 90_000_000 }),
+      artifact('flaky-report-1', { size_in_bytes: 300 }),
+      artifact('ui-blob-report-chromium', { size_in_bytes: 800_000 }),
+      artifact('ui-report', { size_in_bytes: 2_300_000 }),
+      artifact('flaky-report-1', { size_in_bytes: 200, created_at: '2026-10-19T10:00:00Z' }),
+    ]);
+    expect(ranked.map((a) => a.name)).toEqual(['ui-report', 'flaky-report-1', 'ui-blob-report-chromium', 'build-output']);
+  });
+});
+
+describe('download folders', () => {
+  const day = 24 * 60 * 60 * 1000;
+  const marker = (pid: number, created: number) => JSON.stringify({ tool: 'rebaseline', pid, created: new Date(created).toISOString() });
+
+  it('marks each download folder as made by rebaseline', async () => {
+    const root = tempDir();
+    const dir = await makeDownloadDir(root);
+    expect(path.basename(dir)).toMatch(/^rebaseline-pull-/);
+    expect(JSON.parse(readFileSync(path.join(dir, '.rebaseline-pull.json'), 'utf8'))).toMatchObject({ tool: 'rebaseline', pid: process.pid });
+  });
+
+  it('removes only old download folders of processes that are gone', async () => {
+    const root = tempDir();
+    const gone = spawnSync(process.execPath, ['-e', '']).pid ?? 0;
+    const now = Date.now();
+    writeFiles(root, {
+      'rebaseline-pull-old/.rebaseline-pull.json': marker(gone, now - 2 * day),
+      'rebaseline-pull-old/1/index.html': 'report',
+      'rebaseline-pull-recent/.rebaseline-pull.json': marker(gone, now - day / 2),
+      'rebaseline-pull-running/.rebaseline-pull.json': marker(process.pid, now - 2 * day),
+      'rebaseline-pull-unmarked/1/index.html': 'report',
+      'rebaseline-pull-broken/.rebaseline-pull.json': '{',
+      'other-tool/.rebaseline-pull.json': marker(gone, now - 2 * day),
+    });
+
+    expect(await removeStaleDownloads(root, now)).toBe(1);
+    expect(readdirSync(root).sort()).toEqual(['other-tool', 'rebaseline-pull-broken', 'rebaseline-pull-recent', 'rebaseline-pull-running', 'rebaseline-pull-unmarked']);
+  });
+
+  it('does not fail when the temporary folder cannot be read', async () => {
+    expect(await removeStaleDownloads(path.join(tempDir(), 'missing'))).toBe(0);
   });
 });
 

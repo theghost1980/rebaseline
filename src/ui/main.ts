@@ -445,7 +445,7 @@ function renderOverlay(): void {
     const rows: [string, string][] = [
       ['A', 'Accept the screenshot'],
       ['R', 'Reject the screenshot'],
-      ['← →  or  ↑ ↓', 'Previous / next'],
+      ['← →  ↑ ↓  K J', 'Previous / next'],
       ['1  2  3', 'Side by side / slider / diff'],
       ['Z', 'Fit to the window / actual size'],
       ['?', 'Show or hide this help'],
