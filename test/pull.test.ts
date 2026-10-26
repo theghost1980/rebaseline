@@ -309,6 +309,7 @@ describe('running gh', () => {
     [1, 'failed to get runs: HTTP 404: Not Found (https://api.github.com/x)', 'acme/shop was not found'],
     [1, "GraphQL: Could not resolve to a Repository with the name 'acme/shop'. (repository)", 'acme/shop was not found'],
     [1, 'unknown flag: --commit', 'This version of the GitHub CLI (gh) is too old'],
+    [1, 'Unknown JSON field: "attempt"\nAvailable fields:\n  conclusion', 'This version of the GitHub CLI (gh) is too old'],
     [1, 'something else went wrong\nmore detail', 'gh run list failed: something else went wrong'],
   ])('explains exit code %i with "%s"', async (code, stderr, message) => {
     const cwd = fakeGh(code, stderr);

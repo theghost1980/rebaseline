@@ -76,7 +76,8 @@ function ghError(err: { code?: string | number | null; name?: string; message: s
     );
   }
   if (options.notFound && /HTTP 404|Not Found|Could not resolve to a/i.test(text)) return options.notFound();
-  if (/unknown (shorthand )?flag|unknown command/i.test(text)) {
+  // Older versions also lack some --json fields, such as "attempt" of gh run list.
+  if (/unknown (shorthand )?flag|unknown command|unknown JSON field/i.test(text)) {
     return new UserError('This version of the GitHub CLI (gh) is too old', 'Update it from https://cli.github.com and try again.');
   }
   const detail = text.split(/\r?\n/).find((line) => line.trim() !== '') ?? err.message;

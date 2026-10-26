@@ -214,13 +214,21 @@ describe('rebaseline pull', () => {
     expect(stderr).toContain('GH_TOKEN');
   });
 
+  it('names the repository it looked in when a pull request has no runs', async () => {
+    const { project } = await makeGitHubRepo();
+    const gh = fakeGh({ prs: { '7': { number: 7, headRefName: 'feature', headRefOid: 'abc1234def5678abc1234def5678abc1234def56', url: 'https://github.com/acme/shop/pull/7' } } });
+    const cli = runCli(['pull', '--pr', '7'], project, gh.env);
+    expect(await cli.exit).toBe(1);
+    expect(cli.output().stderr).toContain('No workflow runs found for pull request #7 of acme/shop');
+  });
+
   it('shows the workflow step to add when no run uploaded a report', async () => {
     const { project } = await makeGitHubRepo();
     const gh = fakeGh({ runs: [run(2, 3)], artifacts: { '2': [artifact('coverage')] } });
     const cli = runCli(['pull'], project, gh.env);
     expect(await cli.exit).toBe(1);
     const { stderr } = cli.output();
-    expect(stderr).toContain('No recent run for branch main uploaded a Playwright report');
+    expect(stderr).toContain('No recent run for branch main of acme/shop uploaded a Playwright report');
     expect(stderr).toContain('- uses: actions/upload-artifact@v7');
     expect(stderr).toContain('name: playwright-report');
   });
