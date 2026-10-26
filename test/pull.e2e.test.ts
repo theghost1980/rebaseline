@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -54,6 +55,12 @@ function artifact(name: string, dir?: string, fields: Partial<Artifact> = {}): A
   return { id: 1, name, size_in_bytes: 2_500_000, expired: false, created_at: '2026-10-21T10:00:00Z', dir, ...fields };
 }
 
+/** The folder the first "gh run download" call wrote to. */
+function downloadDest(calls: string[][]): string {
+  const download = calls.find((c) => c[0] === 'run' && c[1] === 'download') ?? [];
+  return download[download.indexOf('-D') + 1] ?? '';
+}
+
 /** The fixture repository with an origin remote on GitHub. */
 async function makeGitHubRepo() {
   const repo = await makeRepo();
@@ -80,6 +87,9 @@ describe('rebaseline pull', () => {
     const page = await connect(cli);
     expect(page.state.shots).toHaveLength(8);
     expect((await page.accept(page.find('default', 'changed screenshot'))).status).toBe(200);
+    const downloaded = path.dirname(downloadDest(gh.calls()));
+    expect(path.basename(downloaded)).toMatch(/^rebaseline-pull-/);
+    expect(existsSync(path.join(downloaded, '.rebaseline-pull.json'))).toBe(true);
     await page.done();
 
     expect(await cli.exit).toBe(0);
@@ -95,7 +105,45 @@ describe('rebaseline pull', () => {
     expect(calls[0]).toEqual(['run', 'list', '-R', 'acme/shop', '--branch', 'main', '--limit', '20', '--json', expect.any(String)]);
     const download = calls.find((c) => c[0] === 'run' && c[1] === 'download') ?? [];
     expect(download.slice(0, 7)).toEqual(['run', 'download', '2', '-R', 'acme/shop', '-n', 'playwright-report']);
-    expect(existsSync(path.dirname(download[8] ?? ''))).toBe(false);
+    expect(existsSync(downloaded)).toBe(false);
+  });
+
+  it('removes downloads that a killed run left behind', async () => {
+    const { project } = await makeGitHubRepo();
+    const tmp = tempDir();
+    const gone = spawnSync(process.execPath, ['-e', '']).pid ?? 0;
+    const marker = (created: number) => JSON.stringify({ tool: 'rebaseline', pid: gone, created: new Date(created).toISOString() });
+    writeFiles(tmp, {
+      'rebaseline-pull-left/.rebaseline-pull.json': marker(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      'rebaseline-pull-left/1/index.html': 'report',
+      'rebaseline-pull-today/.rebaseline-pull.json': marker(Date.now() - 60_000),
+    });
+    const gh = fakeGh({ runs: [run(2, 3)], artifacts: { '2': [artifact('playwright-report', savedReport)] } });
+
+    const cli = runCli(['pull', '--run', '2', '--no-open'], project, { ...gh.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp });
+    const page = await connect(cli);
+    expect(readdirSync(tmp).filter((name) => name.startsWith('rebaseline-pull-')).length).toBe(2);
+    expect(existsSync(path.join(tmp, 'rebaseline-pull-left'))).toBe(false);
+    expect(existsSync(path.join(tmp, 'rebaseline-pull-today'))).toBe(true);
+    await page.done();
+
+    expect(await cli.exit).toBe(0);
+    expect(readdirSync(tmp).filter((name) => name.startsWith('rebaseline-pull-'))).toEqual(['rebaseline-pull-today']);
+  });
+
+  // Windows has no signals to send: killing a process there always ends it at once.
+  it.skipIf(process.platform === 'win32').each(['SIGINT', 'SIGHUP'] as const)('removes the download on %s', async (signal) => {
+    const { project } = await makeGitHubRepo();
+    const gh = fakeGh({ runs: [run(2, 3)], artifacts: { '2': [artifact('playwright-report', savedReport)] } });
+    const cli = runCli(['pull', '--run', '2', '--no-open'], project, gh.env);
+    await connect(cli);
+    const downloaded = path.dirname(downloadDest(gh.calls()));
+    expect(existsSync(downloaded)).toBe(true);
+
+    cli.kill(signal);
+    expect(await cli.exit).toBe(0);
+    expect(cli.output().stdout).toContain('Review finished: 0 accepted, 0 rejected, 8 not reviewed.');
+    expect(existsSync(downloaded)).toBe(false);
   });
 
   it('stops when the newest run passed', async () => {
@@ -200,7 +248,49 @@ describe('rebaseline pull', () => {
     const gh = fakeGh({ runs: [run(2, 3)], artifacts: { '2': [artifact('playwright-report'), artifact('coverage')] } });
     const cli = runCli(['pull', '--run', '2', '--artifact', 'e2e-report'], project, gh.env);
     expect(await cli.exit).toBe(1);
-    expect(cli.output().stderr).toContain('Run 2 has no artifact named e2e-report\n  Its artifacts: coverage, playwright-report.');
+    expect(cli.output().stderr).toContain('Run 2 has no artifact named e2e-report\n  Its artifacts: playwright-report (2.4 MB), coverage (2.4 MB).');
+  });
+
+  it('names the artifacts that look like reports when none is called playwright-report', async () => {
+    const { project, head } = await makeGitHubRepo();
+    const names = ['build-output', 'flaky-report-1', 'flaky-report-2', 'flaky-report-3', 'ui-blob-report-1', 'ui-blob-report-2', 'ui-blob-report-3', 'ui-blob-report-4', 'ui-blob-report-5'];
+    const others = names.map((name) => artifact(name, undefined, { size_in_bytes: name === 'build-output' ? 90_000_000 : 300_000 }));
+    const gh = fakeGh({
+      runs: [run(3, 5, { workflowName: 'lint', headSha: head }), run(2, 10, { headSha: head })],
+      artifacts: { '3': [], '2': [...others, artifact('ui-report', undefined, { size_in_bytes: 2_300_000 })] },
+    });
+    const cli = runCli(['pull', '--no-open'], project, gh.env);
+    expect(await cli.exit).toBe(1);
+    expect(cli.output().stdout).toContain('Run 2: "tests" on main (failed, 10 minutes ago)');
+    const { stderr } = cli.output();
+    expect(stderr).toContain('Run 2 has no artifact named playwright-report\n  Its artifacts: ui-report (2.2 MB), flaky-report-1 (293.0 KB),');
+    expect(stderr).toContain(', and 2 more. Choose the report with --artifact <name>.');
+    expect(stderr).not.toContain('build-output');
+    expect(gh.calls().some((c) => c[1] === 'download')).toBe(false);
+  });
+
+  it('explains an artifact that holds test results instead of the report', async () => {
+    const { project } = await makeGitHubRepo();
+    const results = tempDir();
+    writeFiles(results, { 'cart-checkout-chromium/test-failed-1.png': png('failed'), 'cart-checkout-chromium-retry1/trace.zip': 'zip' });
+    const gh = fakeGh({ runs: [run(2, 3)], artifacts: { '2': [artifact('playwright-report-linux', results)] } });
+    const cli = runCli(['pull', '--run', '2'], project, gh.env);
+    expect(await cli.exit).toBe(1);
+    const { stderr } = cli.output();
+    expect(stderr).toContain('The artifact playwright-report-linux holds test results, not the HTML report');
+    expect(stderr).toContain('path: playwright-report/');
+    expect(stderr).not.toContain('blob');
+  });
+
+  it('explains an artifact that holds blob reports', async () => {
+    const { project } = await makeGitHubRepo();
+    const blobs = tempDir();
+    writeFiles(blobs, { 'report-chromium.zip': 'zip' });
+    const gh = fakeGh({ runs: [run(2, 3)], artifacts: { '2': [artifact('ui-blob-report-chromium', blobs)] } });
+    const cli = runCli(['pull', '--run', '2', '--artifact', 'ui-blob-report-chromium'], project, gh.env);
+    expect(await cli.exit).toBe(1);
+    expect(cli.output().stderr).toContain('The artifact ui-blob-report-chromium holds blob reports, not an HTML report');
+    expect(cli.output().stderr).toContain('npx playwright merge-reports');
   });
 
   it('accepts numeric artifact and repository names', async () => {

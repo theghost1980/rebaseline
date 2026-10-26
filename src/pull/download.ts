@@ -4,7 +4,7 @@ import { UserError } from '../lib/errors.js';
 import { runGh } from './gh.js';
 import { type RepoRef, repoName } from './repo.js';
 import type { Artifact, Run } from './runs.js';
-import { MERGE_REPORTS_YAML } from './snippets.js';
+import { MERGE_REPORTS_YAML, UPLOAD_REPORT_YAML } from './snippets.js';
 
 /** How deep inside an artifact the report folder can be (path: test-output/playwright-report/). */
 const MAX_DEPTH = 3;
@@ -36,15 +36,24 @@ export async function downloadReports(
     const report = await findReportDir(dest);
     if (report) {
       reports.push(report);
-    } else if (await hasZipFiles(dest)) {
+      continue;
+    }
+    const files = (await readdir(dest, { recursive: true }).catch(() => [])).map((name) => path.basename(String(name)));
+    if (files.some(isBlobReport)) {
       throw new UserError(
         `The artifact ${artifact.name} holds blob reports, not an HTML report`,
         'Merge them into an HTML report in your workflow and upload it as an artifact, for example:',
         MERGE_REPORTS_YAML,
       );
-    } else {
-      throw new UserError(`The artifact ${artifact.name} does not contain a Playwright HTML report`, 'Choose the artifact that holds the report with --artifact <name>.');
     }
+    if (files.some(isTestResult)) {
+      throw new UserError(
+        `The artifact ${artifact.name} holds test results, not the HTML report`,
+        'Upload the playwright-report folder as an artifact in your workflow, for example:',
+        UPLOAD_REPORT_YAML,
+      );
+    }
+    throw new UserError(`The artifact ${artifact.name} does not contain a Playwright HTML report`, 'Choose the artifact that holds the report with --artifact <name>.');
   }
   return reports;
 }
@@ -70,7 +79,12 @@ async function isReportPage(file: string): Promise<boolean> {
   }
 }
 
-async function hasZipFiles(dir: string): Promise<boolean> {
-  const entries = await readdir(dir, { recursive: true }).catch(() => []);
-  return entries.some((name) => String(name).toLowerCase().endsWith('.zip'));
+/** The blob reporter writes report.zip, or report-<shard or project>.zip. */
+function isBlobReport(file: string): boolean {
+  return /^report.*\.zip$/i.test(file);
+}
+
+/** Files Playwright leaves in test-results/; trace.zip is one, which is not a blob report. */
+function isTestResult(file: string): boolean {
+  return file === 'trace.zip' || file === 'error-context.md' || file === '.last-run.json' || /^test-(failed|finished)-\d+\.png$/.test(file);
 }

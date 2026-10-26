@@ -43,7 +43,7 @@ export function runCli(args: string[], cwd: string, env: NodeJS.ProcessEnv = {})
     }
     throw new Error(`Output did not match ${re}.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   };
-  return { exit, waitFor, output: () => ({ stdout, stderr }) };
+  return { exit, waitFor, output: () => ({ stdout, stderr }), kill: (signal: NodeJS.Signals) => child.kill(signal) };
 }
 
 /** Talks to a running review through its API, like the page does. */
