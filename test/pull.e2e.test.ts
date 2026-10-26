@@ -228,7 +228,7 @@ describe('rebaseline pull', () => {
     const cli = runCli(['pull'], project, gh.env);
     expect(await cli.exit).toBe(1);
     const { stderr } = cli.output();
-    expect(stderr).toContain('No recent run for branch main of acme/shop uploaded a Playwright report');
+    expect(stderr).toContain('No recent run for branch main of acme/shop uploaded a Playwright report\n  Checked 1 finished run (tests). Upload');
     expect(stderr).toContain('- uses: actions/upload-artifact@v7');
     expect(stderr).toContain('name: playwright-report');
   });

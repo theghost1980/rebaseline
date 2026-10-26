@@ -21,6 +21,7 @@ import {
   type Reference,
   type ReportArtifacts,
   type Run,
+  searchedRuns,
   selectReportArtifacts,
   viewPullRequest,
   viewRun,
@@ -149,12 +150,15 @@ async function chooseNewestRun(repo: RepoRef, runs: Run[], subject: string, name
     if (!runs.some(isFinished)) {
       throw new UserError(`No workflow run for ${subject} has finished yet`, `Wait for it to finish, then run the command again: ${latest.url}`);
     }
+    // Naming the runs shows whether the workflow, the artifact name or the branch is the problem.
+    const searched = searchedRuns(runs);
+    const checked = `Checked ${plural(searched.length, 'finished run')} (${[...new Set(searched.map((r) => r.workflowName))].join(', ')}).`;
     if (name !== undefined) {
-      throw new UserError(`No recent run for ${subject} has an artifact named ${name}`, 'Check the name, or choose a run with --run <id|url>.');
+      throw new UserError(`No recent run for ${subject} has an artifact named ${name}`, `${checked} Check the name, or choose a run with --run <id|url>.`);
     }
     throw new UserError(
       `No recent run for ${subject} uploaded a Playwright report`,
-      'Upload the HTML report as an artifact in your workflow, for example:',
+      `${checked} Upload the HTML report as an artifact in your workflow, for example:`,
       UPLOAD_REPORT_YAML,
     );
   }

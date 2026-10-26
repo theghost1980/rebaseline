@@ -1,8 +1,15 @@
+import path from 'node:path';
 import { runGit } from '../core/git.js';
 import { gitLfsInstalled } from '../core/lfs.js';
 import { plural } from '../lib/format.js';
 import { bullet, color, log } from '../lib/output.js';
+import { realPathOf, toPosix } from '../lib/paths.js';
 import type { SessionResults } from './session.js';
+
+/** Double quotes work the same in bash, zsh, PowerShell and cmd for the usual file names. */
+function quoteForShell(p: string): string {
+  return /^[\w./@+-]+$/.test(p) ? p : `"${p}"`;
+}
 
 /** Prints what the review changed, with git's view of the written files. */
 export async function printSummary(
@@ -40,6 +47,15 @@ export async function printSummary(
   }
   for (const target of targets) {
     if (!listed.has(target)) log.plain(`    ${color.dim(`${bullet} ${target} (same content as the committed file)`)}`);
+  }
+
+  // Ready to copy, relative to the current folder, which may be below the repository root.
+  const changed = targets.filter((t) => listed.has(t));
+  if (changed.length > 0) {
+    const cwd = realPathOf(process.cwd());
+    const paths = changed.map((t) => quoteForShell(toPosix(path.relative(cwd, path.join(root, t)))));
+    log.plain('  Stage them for a commit:');
+    log.plain(`    git add -- ${paths.join(' ')}`);
   }
 
   const lfs = accepted.filter((a) => a.lfs).length;
