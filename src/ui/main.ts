@@ -47,6 +47,26 @@ function h(tag: string, attrs: Record<string, Attr> = {}, ...children: (Node | s
   return el;
 }
 
+/** A copy of the logo kept in the page template; null shows the name alone. */
+function logo(): Node | null {
+  return (document.getElementById('logo') as HTMLTemplateElement | null)?.content.firstElementChild?.cloneNode(true) ?? null;
+}
+
+const LINKS: [string, string][] = [
+  ['Beta feedback', 'https://github.com/theghost1980/rebaseline/discussions/13'],
+  ['rebaseline on npm', 'https://www.npmjs.com/package/rebaseline'],
+  ['@theghost1980 on GitHub', 'https://github.com/theghost1980/'],
+];
+
+/** Where rebaseline comes from, under the help and the end message. Links open in a new tab and never send this page's address. */
+function about(): HTMLElement {
+  return h(
+    'p',
+    { class: 'links' },
+    ...LINKS.flatMap(([label, href], i) => [i > 0 ? ' · ' : '', h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, label)]),
+  );
+}
+
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
@@ -211,7 +231,7 @@ function renderHeader(s: StateView): void {
     h('button', { class: mode === value ? 'active' : '', title: `${label} (${key})`, click: () => setMode(value) }, label);
 
   header.replaceChildren(
-    h('h1', {}, 'rebaseline'),
+    h('h1', {}, logo(), 'rebaseline'),
     h('span', { class: 'muted' }, `${accepted + rejected} of ${s.shots.length} reviewed · ${accepted} accepted · ${rejected} rejected`),
     h('span', { class: 'spacer' }),
     h('span', { class: 'segmented', role: 'group', 'aria-label': 'View' }, modeButton('side', 'Side by side', '1'), modeButton('slider', 'Slider', '2'), modeButton('diff', 'Diff', '3')),
@@ -458,9 +478,11 @@ function renderOverlay(): void {
         h(
           'div',
           { class: 'dialog', role: 'dialog', 'aria-label': 'Keyboard shortcuts' },
+          h('div', { class: 'logo-large' }, logo()),
           h('h2', {}, 'Keyboard shortcuts'),
           h('table', {}, ...rows.map(([keys, what]) => h('tr', {}, h('td', {}, h('kbd', {}, keys)), h('td', {}, what)))),
           h('p', { class: 'muted' }, 'Accepting writes the image to its baseline file right away. Rejecting an accepted screenshot puts the previous file back.'),
+          about(),
         ),
       ),
     );
@@ -476,8 +498,10 @@ function render(): void {
       h(
         'div',
         { class: 'center' },
+        h('div', { class: 'logo-large' }, logo()),
         h('h2', {}, ended === 'done' ? 'Review finished' : 'The review has ended'),
         h('p', { class: 'muted' }, 'The summary is in your terminal. You can close this tab.'),
+        about(),
       ),
     );
     return;
