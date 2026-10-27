@@ -7,7 +7,7 @@
 - **`0.1.0`** is published as `latest` once beta testers have used rebaseline on their own projects and no serious bug is open. A serious bug is one that writes to the wrong file or loses data, breaks `review` or `pull`, or makes rebaseline fail on a supported system.
 - **After `0.1.0`**, while the version is `0.x`, a minor version (`0.2.0`) can change behavior and a patch version (`0.1.1`) only fixes bugs.
 
-## Unreleased
+## 0.1.0-beta.1 (2026-10-27)
 
 - The review page shows the rebaseline logo, also as the icon of its browser tab, and links to the beta feedback discussion, npm and GitHub in its help and in the message at the end.
 
