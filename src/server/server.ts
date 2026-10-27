@@ -9,6 +9,8 @@ import type { ImageKind } from '../review/view.js';
 export interface ServerOptions {
   /** Page served at "/". */
   html: string;
+  /** Served at /favicon.svg and /favicon.ico. */
+  favicon?: { svg: string; ico: Buffer };
   /** 0 or undefined picks a free port. */
   port?: number;
 }
@@ -69,6 +71,20 @@ export async function startServer(session: ReviewSession, options: ServerOptions
           "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'",
       });
       res.end(options.html);
+      return;
+    }
+
+    // The favicon is the same for everyone, so it needs no token.
+    if (method === 'GET' && options.favicon && (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico')) {
+      const svg = url.pathname === '/favicon.svg';
+      res.writeHead(200, {
+        ...SECURITY_HEADERS,
+        'Cache-Control': 'private, max-age=86400',
+        'Content-Type': svg ? 'image/svg+xml' : 'image/x-icon',
+        // An SVG opened on its own is a document: let it style itself, and nothing else.
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+      });
+      res.end(svg ? options.favicon.svg : options.favicon.ico);
       return;
     }
 

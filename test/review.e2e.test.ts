@@ -80,6 +80,31 @@ describe('rebaseline review', () => {
     expect(cli.output().stdout).toContain(` M fixtures/pw-project/${rel}`);
   });
 
+  it('serves the page with its logo and the favicons', async () => {
+    const { project } = await makeRepo();
+    const reportDir = path.join(tempDir(), 'report');
+    cpSync(path.join(fixtureDir, 'report'), reportDir, { recursive: true });
+    const cli = runCli(['review', '--report', reportDir, '--no-open'], project);
+    const [, url = ''] = await cli.waitFor(/Review page: (http:\/\/127\.0\.0\.1:\d+\/\?token=[0-9a-f]+)/);
+    const { origin } = new URL(url);
+
+    const page = await (await fetch(url)).text();
+    expect(page).toMatch(/<template id="logo"><svg [^>]*viewBox="0 0 256 256"/);
+    expect(page).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+    // The links under the help and the end message; the page address, with its token, is never sent to them.
+    expect(page).toContain('https://github.com/theghost1980/rebaseline/discussions/13');
+    expect(page).toContain('https://www.npmjs.com/package/rebaseline');
+    expect(page).toContain('https://github.com/theghost1980/');
+    expect(page).toContain('noopener noreferrer');
+    expect(await (await fetch(`${origin}/favicon.svg`)).text()).toContain('class="rb-accent"');
+    // ICO files start with 00 00 01 00, then the number of images.
+    expect([...Buffer.from(await (await fetch(`${origin}/favicon.ico`)).arrayBuffer()).subarray(0, 6)]).toEqual([0, 0, 1, 0, 2, 0]);
+
+    const { searchParams } = new URL(url);
+    await fetch(`${origin}/api/done`, { method: 'POST', headers: { 'x-rebaseline-token': searchParams.get('token') ?? '' } });
+    expect(await cli.exit).toBe(0);
+  });
+
   it('says there is nothing to review when every test passed', async () => {
     const { project } = await makeRepo();
     const reportDir = writeReport(tempDir(), [{ title: 'ok', outcome: 'expected', results: [{ status: 'passed' }] }]);

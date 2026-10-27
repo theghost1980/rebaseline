@@ -1,6 +1,6 @@
 {
   "name": "rebaseline",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.1",
   "description": "Review failed Playwright screenshots in your browser and accept them into their baseline files, also from GitHub Actions runs. No Docker.",
   "keywords": [
     "playwright",

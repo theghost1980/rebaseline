@@ -1,4 +1,4 @@
-import html from 'virtual:ui-html';
+import html, { faviconIco, faviconSvg } from 'virtual:ui-html';
 import { NotInRepositoryError } from '../core/git.js';
 import { loadBaselines, resolveReport } from '../core/resolver.js';
 import type { Report } from '../core/types.js';
@@ -71,7 +71,7 @@ export async function reviewReport(report: Report, options: ReviewReportOptions)
     );
   }
   const session = new ReviewSession(report, resolutions, baselines.root);
-  const server = await startServer(session, { html, port: options.port });
+  const server = await startServer(session, { html, favicon: { svg: faviconSvg, ico: Buffer.from(faviconIco, 'base64') }, port: options.port });
 
   log.step(
     `${plural(shots, 'failed screenshot')} to review` +

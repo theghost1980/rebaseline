@@ -12,9 +12,11 @@ afterEach(async () => {
   await Promise.all(running.splice(0).map((s) => s.close()));
 });
 
+const FAVICON = { svg: '<svg xmlns="http://www.w3.org/2000/svg"/>', ico: Buffer.from([0, 0, 1, 0]) };
+
 async function start(port?: number) {
   const fixture = await makeSession();
-  const server = await startServer(fixture.session, port === undefined ? { html: '<p>TEST PAGE</p>' } : { html: '<p>TEST PAGE</p>', port });
+  const server = await startServer(fixture.session, { html: '<p>TEST PAGE</p>', favicon: FAVICON, ...(port === undefined ? {} : { port }) });
   running.push(server);
   const base = `http://127.0.0.1:${server.port}`;
   const call = (method: string, route: string, auth = true) =>
@@ -47,6 +49,19 @@ describe('review server', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('<p>TEST PAGE</p>');
     expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+  });
+
+  it('serves the favicon without the token, as SVG and as ICO', async () => {
+    const { base, server } = await start();
+    const svg = await fetch(`${base}/favicon.svg`);
+    expect(svg.status).toBe(200);
+    expect(svg.headers.get('content-type')).toBe('image/svg+xml');
+    expect(svg.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'");
+    expect(await svg.text()).toBe(FAVICON.svg);
+    const ico = await fetch(`${base}/favicon.ico`);
+    expect(ico.headers.get('content-type')).toBe('image/x-icon');
+    expect(Buffer.from(await ico.arrayBuffer())).toEqual(FAVICON.ico);
+    expect(await rawGet(server.port, '/favicon.ico', `evil.example:${server.port}`, '')).toBe(403);
   });
 
   it('requires the token for the API', async () => {
