@@ -9,7 +9,7 @@
 
 rebaseline shows the failed `toHaveScreenshot` results of a Playwright run in your browser (expected, actual and diff) and writes the screenshots you accept to their baseline files in your repository. It works with the report of your last GitHub Actions run, so you can update `-linux.png` baselines from a Mac or Windows machine.
 
-> **Beta.** Try it with `npx rebaseline@beta`. Feedback is very welcome, especially when something fails: open a [discussion](https://github.com/theghost1980/rebaseline/discussions) or an [issue](https://github.com/theghost1980/rebaseline/issues/new/choose).
+> **Beta.** Try it with `npx rebaseline@beta`. Feedback is very welcome, especially when something fails: reply in the [beta feedback discussion](https://github.com/theghost1980/rebaseline/discussions/13) or open an [issue](https://github.com/theghost1980/rebaseline/issues/new/choose).
 
 ![The review page: the expected and actual screenshots of a pricing section side by side, with Accept and Reject buttons and the baseline file that accepting replaces](.github/assets/review-side-by-side.png)
 
