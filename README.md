@@ -19,6 +19,16 @@ Playwright screenshots depend on the operating system, so most teams keep their 
 
 rebaseline does the last one for you: it downloads the report, finds the baseline file of each failed screenshot and replaces only the ones you accept after looking at them.
 
+## Try it in a minute
+
+The [demo repository](https://github.com/theghost1980/rebaseline-demo) has a branch whose screenshot tests fail, with the report of its CI run saved. You only need Node.js 22 and git:
+
+```bash
+git clone -b try-rebaseline https://github.com/theghost1980/rebaseline-demo
+cd rebaseline-demo
+npx rebaseline@beta review --report sample-report
+```
+
 ## Quick start
 
 Run it in your Playwright project folder, or at the root of the repository.
@@ -28,6 +38,8 @@ Review the report of your newest GitHub Actions run (it needs the [GitHub CLI](h
 ```bash
 npx rebaseline@beta pull
 ```
+
+No GitHub CLI? Download the report artifact from the run page and review the zip ([see below](#without-the-github-cli)).
 
 Review a local run:
 
@@ -69,6 +81,19 @@ macOS, Windows and Linux are supported.
   - upload the report of each shard as `playwright-report-1`, `playwright-report-2` and so on, for example with `name: playwright-report-${{ matrix.shardIndex }}`, and `pull` joins them;
   - or merge your blob reports into one HTML report with `npx playwright merge-reports`. If `pull` finds blob reports, it prints the job to add.
 
+## Without the GitHub CLI
+
+`review` also reads the zip of a report artifact, so you can review a CI run without `gh`:
+
+1. Open the workflow run on GitHub and download the `playwright-report` artifact from its summary page.
+2. In your project folder, run:
+
+   ```bash
+   npx rebaseline@beta review --report path/to/playwright-report.zip
+   ```
+
+The zip is extracted to a temporary folder that is removed when the review ends. Your workflow still has to upload the HTML report ([see above](#set-up-your-workflow-for-pull)), and sharded reports have to be reviewed one zip at a time.
+
 ## Commands
 
 ### `rebaseline review`
@@ -77,7 +102,7 @@ Reviews a local Playwright HTML report.
 
 | Option | Meaning |
 | --- | --- |
-| `--report <dir>` | Report folder (default: `playwright-report`) |
+| `--report <path>` | Report folder, or the zip of a report artifact (default: `playwright-report`) |
 | `--run` | Run the Playwright tests first; options after `--` go to Playwright, as in `review --run -- --project=chromium` |
 | `--port <port>` | Port for the review page (default: any free port) |
 | `--no-open` | Print the address of the page without opening the browser |

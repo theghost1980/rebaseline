@@ -2,10 +2,16 @@
 
 ## Versions
 
-- **Betas** are published as `0.1.0-beta.N` under the npm `beta` tag, so you run them with `npx rebaseline@beta`. Until `0.1.0`, a plain `npx rebaseline` installs `0.0.1`, which only holds the name.
+- **Betas** are published as `0.1.0-beta.N` under the npm `beta` tag, so you run them with `npx rebaseline@beta`. Until `0.1.0`, the `latest` tag also points to the newest beta.
 - **Between betas**, commands and options may still change. Every change is listed here.
 - **`0.1.0`** is published as `latest` once beta testers have used rebaseline on their own projects and no serious bug is open. A serious bug is one that writes to the wrong file or loses data, breaks `review` or `pull`, or makes rebaseline fail on a supported system.
 - **After `0.1.0`**, while the version is `0.x`, a minor version (`0.2.0`) can change behavior and a patch version (`0.1.1`) only fixes bugs.
+
+## 0.1.0-beta.2 (2026-11-02)
+
+- `review --report` also takes the zip of a report artifact, as downloaded from a workflow run page, so a CI run can be reviewed without the GitHub CLI. The zip is extracted to a temporary folder that is removed afterwards.
+- `review --report` finds the report in a subfolder, as in an extracted artifact.
+- When the GitHub CLI is missing or not signed in, `pull` says how to review the run without it.
 
 ## 0.1.0-beta.1 (2026-10-27)
 

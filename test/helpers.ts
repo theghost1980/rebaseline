@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +63,16 @@ export function writeFiles(root: string, files: Record<string, string | Buffer>)
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, content);
   }
+}
+
+/** The files under `dir` as a zip, at its root or under `into/`, like an artifact downloaded from a run page. */
+export function zipDir(dir: string, into = ''): Buffer {
+  const files: Record<string, Uint8Array> = {};
+  for (const rel of readdirSync(dir, { recursive: true }).map(String)) {
+    const file = path.join(dir, rel);
+    if (statSync(file).isFile()) files[path.posix.join(into, rel.split(path.sep).join('/'))] = readFileSync(file);
+  }
+  return Buffer.from(zipSync(files));
 }
 
 /** Installs a stand-in for @playwright/test in `project`. `script` becomes its CLI. */

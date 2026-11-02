@@ -12,12 +12,13 @@ const cli = cac('rebaseline');
 cli
   .command('review', 'Review failed screenshots in your browser')
   .usage('review [options] [-- <playwright test options>]')
-  .option('--report <dir>', 'Playwright HTML report folder', { default: 'playwright-report' })
+  .option('--report <path>', 'Playwright HTML report folder, or the zip of a report artifact', { default: 'playwright-report' })
   .option('--run', 'Run the Playwright tests first (options after -- go to Playwright)')
   .option('--port <port>', 'Port for the review page (default: any free port)')
   .option('--no-open', 'Print the address without opening the browser')
   .example('  $ rebaseline review')
   .example('  $ rebaseline review --run -- --project=chromium')
+  .example('  $ rebaseline review --report playwright-report.zip')
   .action((options: ReviewOptions) => review(options));
 
 cli

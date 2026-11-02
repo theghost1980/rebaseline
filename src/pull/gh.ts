@@ -13,6 +13,10 @@ export interface GhOptions {
 /** Keeps gh from prompting, checking for updates or adding colors. */
 const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', GH_SPINNER_DISABLED: '1', NO_COLOR: '1' };
 
+/** The way to review a run without gh, for the errors that mean it cannot be used. */
+const WITHOUT_GH = 'Or download the report artifact from the run page and review the zip:';
+const REVIEW_ZIP = '  rebaseline review --report playwright-report.zip';
+
 /**
  * The program that runs gh. REBASELINE_GH points at a JavaScript file that
  * replaces gh, run with Node; the tests use it because Windows cannot run a
@@ -56,12 +60,16 @@ export async function ghJson<T>(args: string[], options: GhOptions): Promise<T> 
 function ghError(err: { code?: string | number | null; name?: string; message: string }, stderr: string, args: string[], options: GhOptions): Error {
   if (err.name === 'AbortError') return err as Error;
   if (err.code === 'ENOENT') {
-    return new UserError('The GitHub CLI (gh) was not found', 'Install it from https://cli.github.com, then sign in with "gh auth login".');
+    return new UserError('The GitHub CLI (gh) was not found', `Install it from https://cli.github.com, then sign in with "gh auth login". ${WITHOUT_GH}`, REVIEW_ZIP);
   }
   const text = stderr.trim();
   // gh exits with 4 when it has no credentials.
   if (err.code === 4 || /gh auth login/.test(text)) {
-    return new UserError('The GitHub CLI (gh) is not signed in', 'Run "gh auth login", or set GH_TOKEN to a token that can read this repository.');
+    return new UserError(
+      'The GitHub CLI (gh) is not signed in',
+      `Run "gh auth login", or set GH_TOKEN to a token that can read this repository. ${WITHOUT_GH}`,
+      REVIEW_ZIP,
+    );
   }
   if (/HTTP 401|Bad credentials/i.test(text)) {
     return new UserError('GitHub rejected the credentials of the GitHub CLI (gh)', 'Run "gh auth login" again, or check the GH_TOKEN variable.');

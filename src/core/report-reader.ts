@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import { strFromU8, unzipSync } from 'fflate';
@@ -8,6 +8,10 @@ import { displayPath, isInside, toPosix } from '../lib/paths.js';
 import type { Failure, Platform, Report, ReportImage, Shot } from './types.js';
 
 const ZIP_PATTERN = /data:application\/zip;base64,([A-Za-z0-9+/=]+)/;
+/** Every Playwright HTML report embeds its data with this marker near the end of index.html. */
+const REPORT_MARKER = 'data:application/zip;base64,';
+/** How deep below a folder a report can be (path: test-output/playwright-report/). */
+const MAX_DEPTH = 3;
 const ACTUAL_SUFFIX = '-actual.png';
 const MISSING_SNAPSHOT = /A snapshot doesn't exist at (.+?)(?:, writing actual\.|\.)[ \t]*$/gm;
 
@@ -39,6 +43,33 @@ export async function readReport(dir: string): Promise<Report> {
   }
 
   return { dir: reportDir, projectNames, failures: sortFailures(failures, projectNames), platform: reportPlatform(failures) };
+}
+
+/**
+ * The folder under `dir` (or `dir` itself) that holds a Playwright HTML
+ * report. Hidden folders and node_modules are skipped.
+ */
+export async function findReportDir(dir: string, depth = 0): Promise<string | null> {
+  if (await isReportPage(path.join(dir, 'index.html'))) return dir;
+  if (depth >= MAX_DEPTH) return null;
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const folders = entries
+    .filter((e) => e.isDirectory() && e.name !== 'node_modules' && !e.name.startsWith('.'))
+    .map((e) => e.name)
+    .sort();
+  for (const name of folders) {
+    const found = await findReportDir(path.join(dir, name), depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function isReportPage(file: string): Promise<boolean> {
+  try {
+    return (await readFile(file, 'utf8')).includes(REPORT_MARKER);
+  } catch {
+    return false;
+  }
 }
 
 /** Joins the reports of several shards into one. Ids stay unique. */
