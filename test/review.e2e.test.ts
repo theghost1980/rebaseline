@@ -1,10 +1,11 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { runGit } from '../src/core/git.js';
 import type { StateView } from '../src/review/view.js';
 import { connect, makeRepo, runCli } from './e2e-helpers.js';
-import { fixtureDir, installFakePlaywright, isolateGit, lfsPointer, tempDir, writeFiles, writeReport } from './helpers.js';
+import { fixtureDir, installFakePlaywright, isolateGit, lfsPointer, tempDir, writeFiles, writeReport, zipDir } from './helpers.js';
 
 describe('rebaseline review', () => {
   isolateGit();
@@ -211,6 +212,61 @@ describe('rebaseline review', () => {
     const cli = runCli(['review', '--report', '2024', '--no-open'], project);
     expect(await cli.exit).toBe(1);
     expect(cli.output().stderr).toContain('No Playwright HTML report found in 2024');
+  });
+
+  it('reviews the zip of a report artifact from a temporary folder that it removes', async () => {
+    const { root, project } = await makeRepo();
+    const zip = path.join(tempDir(), 'playwright-report.zip');
+    writeFileSync(zip, zipDir(path.join(fixtureDir, 'report')));
+    const tmp = tempDir();
+    const extracted = () => readdirSync(tmp).filter((name) => name.startsWith('rebaseline-pull-'));
+
+    const cli = runCli(['review', '--report', zip, '--no-open'], project, { TMPDIR: tmp, TEMP: tmp, TMP: tmp });
+    const page = await connect(cli);
+    expect(page.state.shots).toHaveLength(8);
+    expect(page.state.shots.every((s) => s.unresolved === null)).toBe(true);
+    expect(extracted()).toHaveLength(1);
+    expect((await page.accept(page.find('default', 'changed screenshot'))).status).toBe(200);
+    await page.done();
+
+    expect(await cli.exit).toBe(0);
+    expect(cli.output().stdout).toContain('Review finished: 1 accepted, 0 rejected, 7 not reviewed.');
+    expect((await runGit(['status', '--porcelain', '--untracked-files=all'], root)).trimEnd()).toBe(
+      ' M fixtures/pw-project/tests/visual.spec.ts-snapshots/hero-default-win32.png',
+    );
+    expect(extracted()).toEqual([]);
+  });
+
+  it('finds the report one folder down, as in an extracted artifact', async () => {
+    const { project } = await makeRepo();
+    const wrapper = path.join(tempDir(), 'playwright-report (1)');
+    cpSync(path.join(fixtureDir, 'report'), path.join(wrapper, 'playwright-report'), { recursive: true });
+
+    const cli = runCli(['review', '--report', wrapper, '--no-open'], project);
+    const page = await connect(cli);
+    expect(page.state.shots).toHaveLength(8);
+    await page.done();
+    expect(await cli.exit).toBe(0);
+  });
+
+  it('explains a zip of blob reports', async () => {
+    const { project } = await makeRepo();
+    const zip = path.join(tempDir(), 'blob-report.zip');
+    writeFileSync(zip, zipSync({ 'report-1.zip': strToU8('blob') }));
+
+    const cli = runCli(['review', '--report', zip, '--no-open'], project);
+    expect(await cli.exit).toBe(1);
+    expect(cli.output().stderr).toContain('blob-report.zip holds blob reports, not an HTML report');
+  });
+
+  it('refuses --run with a zip', async () => {
+    const { project } = await makeRepo();
+    const zip = path.join(tempDir(), 'playwright-report.zip');
+    writeFileSync(zip, zipDir(path.join(fixtureDir, 'report')));
+
+    const cli = runCli(['review', '--run', '--report', zip, '--no-open'], project);
+    expect(await cli.exit).toBe(1);
+    expect(cli.output().stderr).toContain('--run writes the report to a folder, not to a file');
   });
 
   it('rejects an invalid port', async () => {

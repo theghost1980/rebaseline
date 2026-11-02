@@ -1,15 +1,11 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { findReportDir } from '../core/report-reader.js';
 import { UserError } from '../lib/errors.js';
 import { runGh } from './gh.js';
 import { type RepoRef, repoName } from './repo.js';
 import type { Artifact, Run } from './runs.js';
 import { MERGE_REPORTS_YAML, UPLOAD_REPORT_YAML } from './snippets.js';
-
-/** How deep inside an artifact the report folder can be (path: test-output/playwright-report/). */
-const MAX_DEPTH = 3;
-/** Every Playwright HTML report embeds its data with this marker near the end of index.html. */
-const REPORT_MARKER = 'data:application/zip;base64,';
 
 /**
  * Downloads each artifact of `run` into its own folder under `dir` and
@@ -38,45 +34,33 @@ export async function downloadReports(
       reports.push(report);
       continue;
     }
-    const files = (await readdir(dest, { recursive: true }).catch(() => [])).map((name) => path.basename(String(name)));
-    if (files.some(isBlobReport)) {
-      throw new UserError(
-        `The artifact ${artifact.name} holds blob reports, not an HTML report`,
-        'Merge them into an HTML report in your workflow and upload it as an artifact, for example:',
-        MERGE_REPORTS_YAML,
-      );
-    }
-    if (files.some(isTestResult)) {
-      throw new UserError(
-        `The artifact ${artifact.name} holds test results, not the HTML report`,
-        'Upload the playwright-report folder as an artifact in your workflow, for example:',
-        UPLOAD_REPORT_YAML,
-      );
-    }
-    throw new UserError(`The artifact ${artifact.name} does not contain a Playwright HTML report`, 'Choose the artifact that holds the report with --artifact <name>.');
+    const files = (await readdir(dest, { recursive: true }).catch(() => [])).map(String);
+    throw noReportError(`The artifact ${artifact.name}`, files, 'Choose the artifact that holds the report with --artifact <name>.');
   }
   return reports;
 }
 
-/** The folder under `dir` (or `dir` itself) that holds a Playwright HTML report. */
-export async function findReportDir(dir: string, depth = 0): Promise<string | null> {
-  if (await isReportPage(path.join(dir, 'index.html'))) return dir;
-  if (depth >= MAX_DEPTH) return null;
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const folders = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
-  for (const name of folders) {
-    const found = await findReportDir(path.join(dir, name), depth + 1);
-    if (found) return found;
+/**
+ * The error for a download without an HTML report, from the paths of its
+ * files: blob reports and test results each get their own advice.
+ */
+export function noReportError(subject: string, files: string[], hint: string): UserError {
+  const names = files.map((f) => path.basename(f));
+  if (names.some(isBlobReport)) {
+    return new UserError(
+      `${subject} holds blob reports, not an HTML report`,
+      'Merge them into an HTML report in your workflow and upload it as an artifact, for example:',
+      MERGE_REPORTS_YAML,
+    );
   }
-  return null;
-}
-
-async function isReportPage(file: string): Promise<boolean> {
-  try {
-    return (await readFile(file, 'utf8')).includes(REPORT_MARKER);
-  } catch {
-    return false;
+  if (names.some(isTestResult)) {
+    return new UserError(
+      `${subject} holds test results, not the HTML report`,
+      'Upload the playwright-report folder as an artifact in your workflow, for example:',
+      UPLOAD_REPORT_YAML,
+    );
   }
+  return new UserError(`${subject} does not contain a Playwright HTML report`, hint);
 }
 
 /** The blob reporter writes report.zip, or report-<shard or project>.zip. */
