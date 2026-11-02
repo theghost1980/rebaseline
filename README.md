@@ -174,6 +174,10 @@ Playwright closed these requests as not planned in May 2026. rebaseline is a sep
 - [microsoft/playwright#14883](https://github.com/microsoft/playwright/issues/14883): a CLI tool to review and update snapshot test results interactively
 - [microsoft/playwright#24310](https://github.com/microsoft/playwright/issues/24310): an "Accept new snapshot" button in the HTML reporter or UI Mode
 
+## Contributing
+
+Feedback, bug reports and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately, as the [security policy](SECURITY.md) explains.
+
 ## Author
 
 Saturno Mangieri ([@theghost1980](https://github.com/theghost1980)) · [LinkedIn](https://www.linkedin.com/in/saturno-mangieri/)
