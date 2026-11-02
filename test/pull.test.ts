@@ -322,7 +322,10 @@ describe('running gh', () => {
     const savedPath = process.env.PATH;
     process.env.PATH = tempDir();
     try {
-      await expect(runGh(['--version'], { cwd: tempDir() })).rejects.toThrow('The GitHub CLI (gh) was not found');
+      await expect(runGh(['--version'], { cwd: tempDir() })).rejects.toMatchObject({
+        message: 'The GitHub CLI (gh) was not found',
+        details: '  rebaseline review --report playwright-report.zip',
+      });
     } finally {
       process.env.PATH = savedPath;
     }

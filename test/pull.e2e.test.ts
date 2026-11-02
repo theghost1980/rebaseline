@@ -202,6 +202,7 @@ describe('rebaseline pull', () => {
     const cli = runCli(['pull'], project, gh.env);
     expect(await cli.exit).toBe(1);
     expect(cli.output().stderr).toMatch(/^x The GitHub CLI \(gh\) is not signed in\n {2}Run "gh auth login"/);
+    expect(cli.output().stderr).toContain('review the zip:\n\n  rebaseline review --report playwright-report.zip\n');
   });
 
   it('explains a repository the account cannot see', async () => {
