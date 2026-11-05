@@ -7,6 +7,8 @@
 
 **Stop using Docker just to update Playwright snapshots from CI.**
 
+> CI stays the source of truth — rebaseline doesn’t render screenshots, it writes the ones your CI already produced into your baselines.
+
 rebaseline shows the failed `toHaveScreenshot` results of a Playwright run in your browser (expected, actual and diff) and writes the screenshots you accept to their baseline files in your repository. It works with the report of your last GitHub Actions run, so you can update `-linux.png` baselines from a Mac or Windows machine.
 
 > **Beta.** Try it with `npx rebaseline@beta`. Feedback is very welcome, especially when something fails: reply in the [beta feedback discussion](https://github.com/theghost1980/rebaseline/discussions/13) or open an [issue](https://github.com/theghost1980/rebaseline/issues/new/choose).
